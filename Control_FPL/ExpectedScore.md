@@ -6,6 +6,8 @@
   
 # Model
 - Use data $Score(P_{ij})$ to denote score by player i in game j last season. 
+- Model $Score(P_{ij})$ to be sampled from a probability distribution, for each $P_i$, use scores in previous games to predict expected score with confidence interval in the next game
+- Naturally supports an online learning scenario where we can keep adding games from this season and update for form. 
 
 
 # Misc
