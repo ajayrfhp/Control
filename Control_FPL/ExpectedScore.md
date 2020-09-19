@@ -1,13 +1,18 @@
 # Goal
-- Use historical performances to predict performance for each player over time
-- Plot all player performances over time and choose a squad to provide highest expected reward over the course of season.
-- Squad selection is done by a heuristic search with constraints
-- Have uncertainity in the model
+- Use historical performances to provide squad with highest expected reward over the season. 
+- Squad selection is done by a heuristic search / sampling with constraints
   
-# Model
-- Use data $Score(P_{ij})$ to denote score by player i in game j last season. 
-- Model $Score(P_{ij})$ to be sampled from a probability distribution, for each $P_i$, use scores in previous games to predict expected score with confidence interval in the next game
-- Naturally supports an online learning scenario where we can keep adding games from this season and update for form. 
+# Formulation
+- View it as a constrained packing problem
+- Pack squad to give most reward while meeting budget and player position constraints
+- Sort available players that can be bought with remaining budget by some heuristic, pick one of k and repeat
+- **Greedy random**
+    - Heuristic - points per 90 / cost, random selection from options
+- **Greedy random with superstar**
+    - Pick some superstars first with heuristic points per 90 and then do greedy random for rest
+- **Greedy random soft**
+    - Heuristic - weighted average of points per 90 / cost and points per 90
+    - weights determined from sampling a skewed normal. 
 
 
 # Misc
