@@ -5,7 +5,8 @@
     - User squad signal 
 
 ## Algorithm
-    - Predict/Train player performance
+    - Update model
+    - Predict player performance
     - player_exchange
     - squad_selection
         - formation selection
