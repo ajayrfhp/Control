@@ -34,18 +34,33 @@ class Data:
         wget.download(self.remote_game_week_data_path,
                       out=self.local_game_week_data_path)
 
-    def get_latest_game_week_data(self) -> pd.DataFrame:
-        '''
-            Returns dataframe with the following
-            Schema
-                name points_latest_game_week_id
-        '''
-        game_week_data = pd.read_csv(self.local_game_week_data_path)[
-            ['name', 'GW', 'total_points']]
-        game_week_data['GW'] += 53
-        game_week_data = pd.pivot_table(
-            game_week_data, index='name', columns='GW', values='total_points').reset_index()
-        return game_week_data
+    async def get_latest_player_data(self):
+        latest_player_data = pd.DataFrame(columns=['name', 'position', 'now_cost', 'element'])
+        position_map = {
+            1: "Goalkeeper",
+            2: "Defender",
+            3: "Midfielder",
+            4: "Forward"
+        }
+        async with aiohttp.ClientSession() as session:
+            fpl = FPL(session)
+            for i in range(1, 498):
+                try :
+                    player = await fpl.get_player(i)
+                    name = player.first_name + " " + player.second_name
+                    latest_player_data.loc[i] = [name, position_map[player.element_type], float(player.now_cost), i]
+                except ValueError:
+                    print(f"player not found {i}")
+        return latest_player_data
+
+    async def player_swap(self, players_out, players_in):
+        async with aiohttp.ClientSession() as session:
+            fpl = FPL(session)
+            await fpl.login(email=os.environ['email'], password=os.environ['password'])
+            user = await fpl.get_user(5645003)
+            # await user.transfer([players_out], [players_in], max_hit=100)
+            squad = await user.get_team()
+            print(squad)
 
     def get_historical_data_by_feature(self, feature) -> pd.DataFrame:
         '''
@@ -127,21 +142,25 @@ class Data:
                 4: "Forward"
             }
             current_squad = pd.DataFrame(
-                columns=["name", "element", "selling_price", "purchase_price", "is_captain"])
+                columns=["name", "element", "selling_price", "purchase_price", "is_captain", "position"])
             for i, player_element in enumerate(squad):
                 player = await fpl.get_player(player_element['element'])
                 name = player.first_name + " " + player.second_name
                 current_squad.loc[i, 'name'] = name
                 for column in ["element","selling_price", "purchase_price","is_captain"]:
                     current_squad.loc[i, column] = player_element[column]
+                current_squad.loc[i, "position"] = position_map[player.element_type]
             return current_squad
 
 
 if __name__ == "__main__":
     data = Data()
     #data.download_latest_game_week_data()
+    #latest_player_data = asyncio.run(data.get_latest_player_data())
+    #print(latest_player_data.head())
     # print(data.get_latest_game_week_data().columns)
-    print(data.get_historical_data_by_feature_set(['total_points', 'yellow_cards', 'assists', 'ict_index', 'saves', 'goals_scored', 'goals_conceded']).shape)
-    print(data.get_recent_data_by_features(['total_points', 'yellow_cards', 'assists', 'ict_index', 'saves', 'goals_scored', 'goals_conceded']).shape)
+    #print(data.get_historical_data_by_feature_set(['total_points', 'yellow_cards', 'assists', 'ict_index', 'saves', 'goals_scored', 'goals_conceded']).shape)
+    #print(data.get_recent_data_by_features(['total_points', 'yellow_cards', 'assists', 'ict_index', 'saves', 'goals_scored', 'goals_conceded']).shape)
     #current_squad = asyncio.run(data.get_current_squad())
     #print(current_squad)
+    asyncio.run(data.player_swap(303, 164))
