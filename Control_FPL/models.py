@@ -64,7 +64,7 @@ class LinearRegressionModel(Model):
 class SimpleConvModel(Model):
     def __init__(self, model_path = "./trained_models/simple_conv_model.pt", epochs = 5):
         self.model = nn.Sequential(*[
-            nn.Conv1d(in_channels=7, out_channels=1, kernel_size=4)
+            nn.Conv1d(in_channels=9, out_channels=1, kernel_size=4)
         ]).double()
         self.model_path = model_path
         self.epochs = epochs
