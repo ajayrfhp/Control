@@ -62,22 +62,20 @@ class LinearRegressionModel(Model):
         return self.model.predict(X_test)
 
 class SimpleConvModel(Model):
-    def __init__(self, model_path = "./trained_models/simple_conv_model.pt", epochs = 5):
+    def __init__(self, model_path = "./trained_models/simple_conv_model.pt", epochs = 5, in_channels=7):
         self.model = nn.Sequential(*[
-            nn.Conv1d(in_channels=9, out_channels=1, kernel_size=4)
+            nn.Conv1d(in_channels=in_channels, out_channels=1, kernel_size=4)
         ]).double()
         self.model_path = model_path
         self.epochs = epochs
         self.optimizer = optim.Adam(self.model.parameters())
 
     def fit(self, X_train, Y_train) -> None:
-        '''
-            Args
-                X_train - numpy array 
-                Y_train - numpy array 
-            Returns
-                None
-            Function fits model to numpy data
+        ''' Function fits model to numpy data
+
+        Args
+            X_train: numpy array 
+            Y_train: numpy array 
         '''
         X_train, Y_train = torch.tensor(X_train).double(), torch.tensor(Y_train).double()
         self.model.train()
@@ -90,12 +88,10 @@ class SimpleConvModel(Model):
             self.optimizer.step()
 
     def fit_loader(self, train_loader):
-        '''
-            Args
-                train_loader - pytorch data loader
-            Returns
-                None
-            Function fits model to pytorch data
+        '''Function fits model to pytorch data
+            
+        Args
+            train_loader:pytorch data loader           
         '''
         self.model.train()
         for _ in range(self.epochs):

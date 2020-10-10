@@ -157,22 +157,35 @@ class Data:
         return opponents
 
     def get_historical_player_opponent_data_by_feature_set(self, player_features, opposition_features) -> np.array:
-        '''
-            Returns a 3d tensor of shape (Num_players, num_opposition_features, seq_length)
-        '''
+        """Gets historical player data and opposition data
+        
+        Args:
+            player_features: List of player features
+            opposition_features: List of opposition team features
+        
+        Returns:
+            History 3d tensor of shape (N, D, L) where each row provides a 
+            D * L matrix describing a player stats and his opponent stats through the course of L games 
+        """
         historical_player_data_by_feature_set = self.get_historical_player_data_by_feature_set(player_features)
         historical_opponent_data_by_feature_set = [self.get_opponent_feature(opposition_feature) for opposition_feature in opposition_features]
         historical_opponent_data_by_feature_set  =  np.array(historical_opponent_data_by_feature_set).transpose(1, 0, 2)
         return np.concatenate((historical_player_data_by_feature_set, historical_opponent_data_by_feature_set), axis=1)
 
     def get_training_data_tensor(self, x, window_width=5, num_features=7, batch_size=50, train_test_split = 0.3) -> (DataLoader, DataLoader):
-        '''
-            Gets training inputs and outputs from a 3d tensor of historical data (Num_players, num_features, seq_length)
-            
-            Returns
-                Data loader containing X and Y with the following dimensions
-                    X -> torch.tensor of shape (Num_samples, num_features, window_width)
-                    Y -> torch.tensor of shape (Num_samples, num_features, 1)
+        '''Uses historical data to prepares training and test samples to train window prediction models
+
+        Args:
+            x: historical data (N, D, L) matrix
+            window_width: length of window
+            num_features: D(player_features + opposition_features)
+            batch_size: batch_size used for training
+            train_test_split: fraction to use for testing
+
+        Returns:    
+            Data loader containing X and Y with the following dimensions
+            X -> torch.tensor of shape (Num_samples, num_features, window_width)
+            Y -> torch.tensor of shape (Num_samples, num_features, 1)
         '''
         X = []
         for row in x:
@@ -181,7 +194,7 @@ class Data:
             trimmed_row = trimmed_row.reshape((num_features, num_windows, window_width))
             trimmed_row = trimmed_row.transpose((1, 0, 2))
             X.extend(trimmed_row)
-        X = torch.tensor(np.array(X)).double()
+        X = torch.tensor(np.array(X).astype(float)).double()
         shuffle(X)
         test_length =  int(train_test_split * len(X))
         X_train, Y_train = X[:test_length, :, :window_width-1], X[:test_length, 0:1, -1]
@@ -192,8 +205,16 @@ class Data:
         return train_loader, test_loader
     
     def get_recent_player_opponent_data_by_feature_set(self, player_features, opposition_features, window_width=4) -> np.array:
-        '''
-            Returns most recent data of player performance and opposition faced
+        '''Gets recent player and opponent feature data for inference
+
+        Args:
+            player_features: List of player features
+            opposition_features: List of opposition features
+            window_width: length of recent window to look at
+
+        Returns:
+            Numpy array of shape (N, D, W) where W is window_width and D = len(player_features) + len(opposition_features)
+            
         '''
         historical_data_by_feature_set = self.get_historical_player_opponent_data_by_feature_set(player_features,opposition_features)
         recent_player_opponent_data_by_feature_set = historical_data_by_feature_set[:, :, -window_width:]
@@ -201,9 +222,16 @@ class Data:
         return np.concatenate((player_names, recent_player_opponent_data_by_feature_set), axis = 2)
 
 
-    def get_recent_data_by_features(self, features, window_width = 4) -> np.array:
-        '''
-            Returns most recent feature set data
+    def get_recent_player_data_by_features(self, features, window_width = 4) -> np.array:
+        '''Gets recent player feature data for inference
+
+        Args:
+            player_features: List of player features
+            window_width: length of recent window to look at
+
+        Returns:
+            Numpy array of shape (N, D, W) where W is window_width and D = len(player_features) + 1 (for name)
+            
         '''
         historical_data_by_feature_set =  self.get_historical_player_data_by_feature_set(features)
         recent_form_by_feature_set = historical_data_by_feature_set[:, :, -window_width:]
@@ -220,6 +248,7 @@ class Data:
             fpl = FPL(session)
             await fpl.login(email=os.environ['email'], password=os.environ['password'])
             user = await fpl.get_user(5645003)
+            bank = (await user.get_transfers_status())["bank"] 
             squad = await user.get_team()
             position_map = {
                 1: "Goalkeeper",
@@ -228,7 +257,7 @@ class Data:
                 4: "Forward"
             }
             current_squad = pd.DataFrame(
-                columns=["name", "element", "selling_price", "purchase_price", "is_captain", "position"])
+                columns=["name", "element", "selling_price", "purchase_price", "is_captain", "position", "bank"])
             for i, player_element in enumerate(squad):
                 player = await fpl.get_player(player_element['element'])
                 name = player.first_name + " " + player.second_name
@@ -236,43 +265,51 @@ class Data:
                 for column in ["element","selling_price", "purchase_price","is_captain"]:
                     current_squad.loc[i, column] = player_element[column]
                 current_squad.loc[i, "position"] = position_map[player.element_type]
+                current_squad.loc[i, "bank"] = bank
             return current_squad
 
 
 if __name__ == "__main__":
     data = Data()
     
-    
-    # latest_player_data = asyncio.run(data.get_latest_player_data(chance_of_playing_threshold=0))
-    # print(latest_player_data.shape)
+    '''
+    latest_player_data = asyncio.run(data.get_latest_player_data(chance_of_playing_threshold=0))
+    print(latest_player_data.shape)
 
     
-    #player_feature = "total_points"
-    #player_data_by_feature = data.get_historical_player_data_by_feature(player_feature)
-    #print(player_data_by_feature.head())
+    player_feature = "total_points"
+    player_data_by_feature = data.get_historical_player_data_by_feature(player_feature)
+    print(player_data_by_feature.head())
 
 
-    #player_features = ['total_points', 'yellow_cards', 'assists', 'ict_index', 'saves', 'goals_scored', 'goals_conceded']
-    #player_data_by_featureset = data.get_historical_player_data_by_feature_set(player_features)
-    #assert(player_data_by_featureset.shape[1] == len(player_features))
-    #print(player_data_by_featureset.shape)
-
-    #print(latest_player_data.head())
-    # print(data.get_latest_game_week_data().columns)
-    #print(data.get_historical_data_by_feature_set(['total_points', 'yellow_cards', 'assists', 'ict_index', 'saves', 'goals_scored', 'goals_conceded']).shape)
-    #print(data.get_historical_player_opponent_data_by_feature_set(['total_points', 'yellow_cards', 'assists', 'ict_index', 'saves', 'goals_scored', 'goals_conceded'], ["npxG", "npxGA"]).shape)
-    #print(data.get_recent_data_by_features(['total_points', 'yellow_cards', 'assists', 'ict_index', 'saves', 'goals_scored', 'goals_conceded']).shape)
-    #get_recent_by_player_and_opposition_features(['total_points', 'yellow_cards', 'assists', 'ict_index', 'saves', 'goals_scored', 'goals_conceded'], ["npxG"])
+    player_features = ['total_points', 'yellow_cards', 'assists', 'ict_index', 'saves', 'goals_scored', 'goals_conceded']
+    player_data_by_featureset = data.get_historical_player_data_by_feature_set(player_features)
+    assert(player_data_by_featureset.shape[1] == len(player_features))
     
     
     team_feature = data.get_team_feature("npxG")
-    print(team_feature)
+    print(team_feature.shape)
 
     opponent_feature = data.get_opponent_feature("npxG")
-    print(opponent_feature)
     opponent_feature_sample = opponent_feature[opponent_feature["name"] == "Bruno Miguel Borges Fernandes"]
     print(opponent_feature_sample)
+
+    print(data.get_historical_player_opponent_data_by_feature_set(player_features, ["npxG"]).shape)
     
+    print(data.get_recent_player_data_by_features(['total_points', 'yellow_cards', 'assists', 'ict_index', 'saves', 'goals_scored', 'goals_conceded']).shape)
+    print(data.get_recent_player_opponent_data_by_feature_set(player_features, ["npxG"]).shape)
     
-    #current_squad = asyncio.run(data.get_current_squad())
-    #print(current_squad)
+    '''
+    current_squad = asyncio.run(data.get_current_squad())
+    print(current_squad)
+    '''
+    
+
+    player_features = ['total_points', 'yellow_cards', 'assists', 'ict_index', 'saves', 'goals_scored', 'goals_conceded']
+    opposition_features = ["npxG", "npxGA"]
+    historical_player_opponent_data = data.get_historical_player_opponent_data_by_feature_set(player_features, opposition_features)[0:1,:,1:]
+    print(historical_player_opponent_data.shape)
+
+    data.get_training_data_tensor(historical_player_opponent_data, num_features=len(player_features)+len(opposition_features))
+
+    '''

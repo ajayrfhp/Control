@@ -16,22 +16,28 @@ class Agent:
             Choose 11, captain and vice captain
         Submit squad
     '''
-    def __init__(self, data_object, features, model_class):
+    def __init__(self, data_object, player_features, opposition_features, model_class):
         self.data_object = data_object
-        self.features = features
+        self.player_features = player_features
+        self.opposition_features = opposition_features
         self.model_class = model_class
-        self.model = SimpleConvModel()
+        self.model = SimpleConvModel(in_channels=len(player_features)+len(opposition_features))
 
     def update_model(self):
-        data_object.download_latest_game_week_data()
-        historical_data = data_object.get_historical_data_by_feature_set(features)[:,:,1:].astype(np.float)
+        if len(self.opposition_features) == 0:
+            historical_data = data_object.get_historical_player_data_by_feature_set(self.player_features)[:,:,1:].astype(np.float)
+        else:
+            historical_data = data_object.get_historical_player_opponent_data_by_feature_set(self.player_features, self.opposition_features)[:,:,1:].astype(np.float)
         train_loader, test_loader = data_object.get_training_data_tensor(historical_data)
         self.model.fit_loader(train_loader)
         self.model.save()
         print('model saved, loss = ', self.model.eval_loader(test_loader))
     
     def predict_next_performance(self) -> pd.DataFrame:
-        recent_data = self.data_object.get_recent_data_by_features(self.features)
+        if len(self.opposition_features) == 0:
+            recent_data = self.data_object.get_recent_player_data_by_features(self.player_features)
+        else:
+            recent_data = self.data_object.get_recent_player_opponent_data_by_feature_set(self.player_features, self.opposition_features)[:,:,1:].astype(np.float)
         self.model.load()
         recent_performances = recent_data[:,:,1:].astype(np.float)
         player_names = recent_data[:,0,0]
@@ -47,9 +53,10 @@ class Agent:
             Returns (player_out, player_in), gain
         '''
         weakest_player, strongest_player, max_gain = None, None, -np.inf
+        bank = predicted_current_squad_performance["bank"].values[0]
         for i, player in predicted_current_squad_performance.iterrows():
             available_budget_by_selling_player = player['selling_price']
-            predicted_non_squad_performance_under_budget = pd.DataFrame(predicted_non_squad_performance[(predicted_non_squad_performance['now_cost'] <= available_budget_by_selling_player) & (predicted_non_squad_performance['position'] == player['position'])])
+            predicted_non_squad_performance_under_budget = pd.DataFrame(predicted_non_squad_performance[(predicted_non_squad_performance['now_cost'] <= available_budget_by_selling_player + bank) & (predicted_non_squad_performance['position'] == player['position'])])
             if predicted_non_squad_performance_under_budget.shape[0] > 0:
                 new_player = predicted_non_squad_performance_under_budget.sort_values(by=['predicted_total_points'], ascending=False).iloc[0]
                 gain = new_player['predicted_total_points'] - player['predicted_total_points']
@@ -105,7 +112,9 @@ class Agent:
         predicted_current_squad_performance = pd.merge(current_squad, predicted_next_performance, on = ['name'])
         
         predicted_non_squad_performance = pd.merge(non_squad, predicted_next_performance, on =['name'])
+        print(predicted_non_squad_performance[predicted_non_squad_performance["position"] == "Forward"].sort_values(by=["predicted_total_points"], ascending=False).head(10))
         (weakest_player, strongest_player), max_gain = self.get_optimal_trade(predicted_current_squad_performance, predicted_non_squad_performance)
+        print(weakest_player, strongest_player)
         predicted_current_squad_performance = predicted_current_squad_performance[predicted_current_squad_performance["name"] != weakest_player["name"]]
         length = len(predicted_current_squad_performance)
         for column in ["name", "element", "position", "predicted_total_points"]:
@@ -117,8 +126,10 @@ class Agent:
         print(new_squad)
     
 if __name__ == "__main__":
-    features = ['total_points', 'yellow_cards', 'assists', 'ict_index', 'saves', 'goals_scored', 'goals_conceded']
+    player_features = ['total_points', 'yellow_cards', 'assists', 'ict_index', 'saves', 'goals_scored', 'goals_conceded']
+    opposition_features = ["npxG", "npxGA"]
     data_object = data.Data()
-    agent = Agent(data_object=data_object, features=features, model_class=SimpleConvModel)
+    agent = Agent(data_object=data_object, player_features=player_features, opposition_features=[], model_class=SimpleConvModel)
     #agent.update_model()
-    asyncio.run(agent.get_new_squad())
+    new_squad = asyncio.run(agent.get_new_squad())
+    print(new_squad)
