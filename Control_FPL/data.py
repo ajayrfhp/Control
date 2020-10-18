@@ -163,7 +163,7 @@ class Data:
                     opponents.iloc[i, j] = team_feature.iloc[opponent-1][j-1]
         opponents.fillna(0, inplace=True)
         indices = [i for i in range(1, opponents.shape[1]) if (i % (window_width + 1) != 0)]
-        opponents[indices] = 0
+        #opponents[indices] = 0
         opponents[opponents.columns[1:]] = opponents[opponents.columns[1:]].shift(periods=-1, axis=1)
         opponents.fillna(0, inplace=True)
         return opponents
@@ -291,45 +291,48 @@ class Data:
 if __name__ == "__main__":
     data = Data()
     
-    '''
-    latest_player_data = asyncio.run(data.get_latest_player_data(chance_of_playing_threshold=0))
-    print(latest_player_data.shape)
+    def block1():
+        latest_player_data = asyncio.run(data.get_latest_player_data(chance_of_playing_threshold=0))
+        print(latest_player_data.shape)
 
-    
-    player_feature = "total_points"
-    player_data_by_feature = data.get_historical_player_data_by_feature(player_feature)
-    print(player_data_by_feature.head())
+    def block2():        
+        player_feature = "total_points"
+        player_data_by_feature = data.get_historical_player_data_by_feature(player_feature)
+        print(player_data_by_feature.head())
+        player_features = ['total_points', 'yellow_cards', 'assists', 'ict_index', 'saves', 'goals_scored', 'goals_conceded']
+        player_data_by_featureset = data.get_historical_player_data_by_feature_set(player_features)
+        assert(player_data_by_featureset.shape[1] == len(player_features))
 
+    def block3():    
+        team_feature = data.get_team_feature("npxG")
+        #print(team_feature)
 
-    player_features = ['total_points', 'yellow_cards', 'assists', 'ict_index', 'saves', 'goals_scored', 'goals_conceded']
-    player_data_by_featureset = data.get_historical_player_data_by_feature_set(player_features)
-    assert(player_data_by_featureset.shape[1] == len(player_features))
-    '''
-    
-    team_feature = data.get_team_feature("npxG")
-    #print(team_feature)
+        opponent_feature = data.get_opponent_feature("npxG")
+        print(opponent_feature)
+        opponent_feature_sample = opponent_feature[opponent_feature["name"] == "Bruno Miguel Borges Fernandes"]
+        print(opponent_feature_sample)
 
-    opponent_feature = data.get_opponent_feature("npxG")
-    print(opponent_feature)
-    opponent_feature_sample = opponent_feature[opponent_feature["name"] == "Bruno Miguel Borges Fernandes"]
-    print(opponent_feature_sample)
+    def block4():
+        player_features = ['total_points', 'ict_index', 'goals_scored', 'assists', 'clean_sheets']
+        print(data.get_historical_player_opponent_data_by_feature_set(player_features, ["npxG"]).shape)
+        
+        print(data.get_recent_player_data_by_features(['total_points', 'yellow_cards', 'assists', 'ict_index', 'saves', 'goals_scored', 'goals_conceded']).shape)
+        print(data.get_recent_player_opponent_data_by_feature_set(player_features, ["npxG"]).shape)
+        
+        current_squad = asyncio.run(data.get_current_squad())
+        print(current_squad)
 
-    '''
-    print(data.get_historical_player_opponent_data_by_feature_set(player_features, ["npxG"]).shape)
-    
-    print(data.get_recent_player_data_by_features(['total_points', 'yellow_cards', 'assists', 'ict_index', 'saves', 'goals_scored', 'goals_conceded']).shape)
-    print(data.get_recent_player_opponent_data_by_feature_set(player_features, ["npxG"]).shape)
-    
-    current_squad = asyncio.run(data.get_current_squad())
-    print(current_squad)
-    '''
-    
-    
+    def block5():
+        player_features = ['total_points', 'yellow_cards', 'assists', 'ict_index', 'saves', 'goals_scored', 'goals_conceded']
+        opposition_features = ["npxG"]
+        historical_player_opponent_data = data.get_historical_player_opponent_data_by_feature_set(player_features, opposition_features)
+        recent_player_opponent_data = data.get_recent_player_opponent_data_by_feature_set(player_features, opposition_features)
+        for i in range(10, 50):
+            print(historical_player_opponent_data[i][-1])
 
-    player_features = ['total_points', 'yellow_cards', 'assists', 'ict_index', 'saves', 'goals_scored', 'goals_conceded']
-    opposition_features = ["npxG", "npxGA"]
-    historical_player_opponent_data = data.get_historical_player_opponent_data_by_feature_set(player_features, opposition_features)
-    print(historical_player_opponent_data)
-
-    #data.get_training_data_tensor(historical_player_opponent_data, num_features=len(player_features)+len(opposition_features))
+    def block6():
+        player_features = ['total_points', 'ict_index', 'goals_scored', 'assists', 'clean_sheets']
+        opposition_features = ["npxG", "npxGA"]
+        data.get_training_data_tensor(historical_player_opponent_data, num_features=len(player_features)+len(opposition_features))
     
+    block5()

@@ -12,6 +12,8 @@ import aiohttp
 import asyncio
 from fpl import FPL
 import os
+from matplotlib import pyplot as plt
+import seaborn as sns
 
 class Agent:
     '''
@@ -26,8 +28,9 @@ class Agent:
         self.player_features = player_features
         self.opposition_features = opposition_features
         self.model_class = model_class
-        self.model = model_class(model_path=model_path,in_channels=len(player_features)+len(opposition_features))
+        self.model = model_class(model_path=model_path,in_channels=len(player_features)+len(opposition_features), num_opposition_features=len(opposition_features))
         self.num_features = len(player_features) + len(opposition_features)
+        self.features = self.player_features + self.opposition_features
         self.visualize = visualize
 
     def update_model(self):
@@ -50,11 +53,14 @@ class Agent:
         self.model.load()
         recent_performances = recent_data[:,:,1:].astype(np.float)
         player_names = recent_data[:,0,0]
-        input_feature = torch.tensor(recent_performances).double().reshape(*self.model.in_shape)
+        input_feature = torch.tensor(recent_performances).double()
+        input_feature[:,-len(self.opposition_features):,:-1] = 0
+        input_feature = input_feature.reshape(*self.model.in_shape)
         next_performance = self.model.model.forward(input_feature).detach().numpy().reshape((-1, ))
-        next_performance_dataframe = pd.DataFrame(columns=['name', 'predicted_total_points'])
+        next_performance_dataframe = pd.DataFrame(columns=['name', 'predicted_total_points', 'input_feature'])
         next_performance_dataframe['name'] = player_names
         next_performance_dataframe['predicted_total_points'] = next_performance
+        next_performance_dataframe['input_feature'] = [x for x in input_feature.detach().numpy()]
         next_performance_dataframe.sort_values(by=['predicted_total_points'], inplace=True, ascending = False)
         return next_performance_dataframe
 
@@ -122,9 +128,16 @@ class Agent:
         predicted_current_squad_performance = pd.merge(current_squad, predicted_next_performance, on = ['name'])
         
         predicted_non_squad_performance = pd.merge(non_squad, predicted_next_performance, on =['name'])
-        print(predicted_non_squad_performance[predicted_non_squad_performance["position"] == "Forward"].sort_values(by=["predicted_total_points"], ascending=False).head(10))
+        print(predicted_non_squad_performance.sort_values(by=["predicted_total_points"], ascending=False).head(25))
         (weakest_player, strongest_player), max_gain = self.get_optimal_trade(predicted_current_squad_performance, predicted_non_squad_performance)
-        print(weakest_player, strongest_player)
+        plt.title(weakest_player['name'])
+        sns.heatmap(weakest_player['input_feature'].reshape((self.num_features, -1)), yticklabels = self.features, cmap = sns.light_palette("seagreen", as_cmap = True), vmin = 0, vmax = 1)
+        plt.show()
+        plt.title(strongest_player['name'])
+        sns.heatmap(strongest_player['input_feature'].reshape((self.num_features, -1)), yticklabels = self.features, cmap = sns.light_palette("seagreen", as_cmap = True), vmin = 0, vmax = 1)
+        plt.show()
+        #print(weakest_player, strongest_player)
+        
         predicted_current_squad_performance = predicted_current_squad_performance[predicted_current_squad_performance["name"] != weakest_player["name"]]
         length = len(predicted_current_squad_performance)
         for column in ["name", "element", "position", "predicted_total_points"]:
