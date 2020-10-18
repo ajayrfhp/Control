@@ -1,9 +1,12 @@
+import pandas as pd
+import torch
 import numpy as np
+import random
+from random import shuffle
 from matplotlib import pyplot as plt
 from scipy.stats import spearmanr
 from sklearn import linear_model
 import seaborn as sns
-import torch 
 import torch.nn as nn
 import torch.optim as optim
 
@@ -12,82 +15,7 @@ class Model:
         self.Y_dim = Y_dim
         pass 
     
-    def fit(self, X_train, Y_train):
-        pass 
-    
-    def predict(self, X_test):
-        return np.zeros((X_test.shape[0], Y_dim))
-
-    def eval(self, X, Y):
-        Y_predictions = self.predict(X)
-        residual = Y - Y_predictions
-        return np.abs(residual).mean()
-
-    def visualize_predictions(self, X, Y):
-        Y_predictions = self.predict(X)
-        corr, p = spearmanr(Y, Y_predictions)
-        plt.title(f"{corr} {p}")
-        plt.plot(Y, Y_predictions, 'o')
-        plt.xlabel('gt')
-        plt.ylabel('predictions')
-        plt.show()
-
-        sns.displot(x=Y)
-        plt.show()     
-
-
-class AverageModel(Model):
-    def __init__(self):
-        pass
-
-    def predict(self, X_test):
-        return X_test.mean(axis=1)
-
-class MedianModel(Model):
-    def __init__(self):
-        pass
-
-    def predict(self, X_test):
-        return np.median(X_test, axis = 1)
-
-
-class LinearRegressionModel(Model):
-    def __init__(self):
-        self.model = linear_model.LinearRegression()
-
-    def fit(self, X_train, Y_train):
-        self.model.fit(X_train, Y_train)
-
-    def predict(self, X_test):
-        return self.model.predict(X_test)
-
-class SimpleConvModel(Model):
-    def __init__(self, model_path = "./trained_models/simple_conv_model.pt", epochs = 5, in_channels=7):
-        self.model = nn.Sequential(*[
-            nn.Conv1d(in_channels=in_channels, out_channels=1, kernel_size=4)
-        ]).double()
-        self.model_path = model_path
-        self.epochs = epochs
-        self.optimizer = optim.Adam(self.model.parameters())
-
-    def fit(self, X_train, Y_train) -> None:
-        ''' Function fits model to numpy data
-
-        Args
-            X_train: numpy array 
-            Y_train: numpy array 
-        '''
-        X_train, Y_train = torch.tensor(X_train).double(), torch.tensor(Y_train).double()
-        self.model.train()
-        for _ in range(self.epochs):
-            self.model.zero_grad()
-            predictions = self.model.forward(X_train).reshape((-1, 1))
-            residual = (predictions - Y_train)
-            loss = (residual ** 2).sum()
-            loss.backward()
-            self.optimizer.step()
-
-    def fit_loader(self, train_loader):
+    def fit(self, train_loader, constrain_positive = True):
         '''Function fits model to pytorch data
             
         Args
@@ -96,41 +24,100 @@ class SimpleConvModel(Model):
         self.model.train()
         for _ in range(self.epochs):
             for (X_train, Y_train) in train_loader:
+                X_train = X_train.reshape(*self.in_shape)
                 self.model.zero_grad()
                 predictions = self.model.forward(X_train).reshape((-1, 1))
                 residual = (predictions - Y_train)
                 loss = (residual ** 2).sum()
                 loss.backward()
                 self.optimizer.step()
-    
-    def eval_loader(self, test_loader):
+                if constrain_positive:
+                    with torch.no_grad():
+                        for param in self.model.parameters():
+                            param.clamp_(0, np.inf)
+    def eval(self, test_loader):
         self.model.eval()
         total_loss = []
         for (X_test, Y_test) in test_loader:
+            X_test = X_test.reshape(*self.in_shape)
             self.model.zero_grad()
             predictions = self.model.forward(X_test).reshape((-1, 1))
             loss = torch.mean(torch.abs(predictions - Y_test))
             total_loss.append(loss.item())
         return sum(total_loss) / len(total_loss)
 
-    def predict(self, X_test):
+    def predict(self, test_loader):
         self.model.eval()
-        X_test = torch.tensor(X_test).double()
-        predictions = self.model.forward(X_test).reshape((-1, 1))
-        return predictions.detach().numpy()
+        features = []
+        predictions = []
+        for (X_test, Y_test) in test_loader:
+            features.append(X_test)
+            X_test = X_test.reshape(*self.in_shape)
+            prediction = self.model.forward(X_test).reshape((-1, 1))
+            predictions.append(prediction)
+        return torch.cat(features), torch.cat(predictions)
 
-    def eval(self, X, Y):
-        X, Y = torch.tensor(X).double(), torch.tensor(Y).double()
-        Y_predictions = self.predict(X)
-        residual = Y - Y_predictions
-        return (torch.abs(residual).mean()).item()
+    def visualize_predictions(self, test_loader, plot_features):
+        features, predictions = self.predict(test_loader)
+        top_score_indices = torch.argsort(predictions, dim=0, descending=True)[0:10,0]
+        bottom_score_indices = torch.argsort(predictions, dim=0)[0:10,0]
+        indices = torch.cat((top_score_indices, bottom_score_indices))
+        for top_score_index in indices:
+            score = float(predictions[top_score_index.item()].item())
+            feature = features[top_score_index.item()].reshape((features.shape[1], 4))
+            plt.title(score)
+            sns.heatmap(feature.numpy(), yticklabels=plot_features, cmap = sns.light_palette("seagreen", as_cmap = True), vmin = 0, vmax = 1)
+            plt.show()
     
     def save(self):
         torch.save(self.model.state_dict(), self.model_path)
 
     def load(self):
-        self.model.load_state_dict(torch.load(self.model_path))
-    
+        self.model.load_state_dict(torch.load(self.model_path))     
+
+class LinearPytorchModel(Model):
+    def __init__(self, model_path = "./trained_models/simple_linear_model.pt", epochs = 5, in_channels=7):
+        self.model = nn.Sequential(*[
+            nn.Linear(4 * in_channels, 1),
+            nn.ReLU()
+        ]).double()
+        self.model_path = model_path
+        self.epochs = epochs
+        self.optimizer = optim.Adam(self.model.parameters())
+        self.in_channels = in_channels
+        self.in_shape = (-1, 4 * in_channels)
+        def weights_init(m):
+            if type(m) == nn.Linear:
+                torch.nn.init.xavier_normal(m.weight)
+                m.bias.data.fill_(0.01)
+        self.model.apply(weights_init)
+
+class SimpleConvModel(Model):
+    def __init__(self, model_path = "./trained_models/simple_conv_model.pt", epochs = 5, in_channels=7):
+        self.model = nn.Sequential(*[
+            nn.Conv1d(in_channels=in_channels, out_channels=1, kernel_size=4),
+            nn.ReLU()
+        ]).double()
+        self.model_path = model_path
+        self.epochs = epochs
+        self.optimizer = optim.Adam(self.model.parameters())
+        self.in_channels = in_channels
+        self.in_shape = (-1, in_channels, 4)
+
+class NonLinearPytorchModel(Model):
+    def __init__(self, model_path = "./trained_models/simple_non_linear_model.pt", epochs = 5, in_channels=7):
+        self.model = nn.Sequential(*[
+            nn.Linear(4 * in_channels, 128),
+            nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.ReLU(),
+            nn.Linear(128, 1)
+        ]).double()
+        self.model_path = model_path
+        self.epochs = epochs
+        self.optimizer = optim.Adam(self.model.parameters())
+        self.in_channels = in_channels
+        self.in_shape = (-1, 4 * in_channels)
 
 
 if __name__ == "__main__":

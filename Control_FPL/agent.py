@@ -1,8 +1,13 @@
-import data
-from models import SimpleConvModel
 import pandas as pd
 import torch
 import numpy as np
+import random
+from random import shuffle
+np.random.seed(17)
+random.seed(17)
+torch.manual_seed(17)
+import data
+from models import SimpleConvModel, LinearPytorchModel
 import aiohttp
 import asyncio
 from fpl import FPL
@@ -16,32 +21,37 @@ class Agent:
             Choose 11, captain and vice captain
         Submit squad
     '''
-    def __init__(self, data_object, player_features, opposition_features, model_class):
+    def __init__(self, data_object, player_features, opposition_features, model_class, model_path, visualize = False):
         self.data_object = data_object
         self.player_features = player_features
         self.opposition_features = opposition_features
         self.model_class = model_class
-        self.model = SimpleConvModel(in_channels=len(player_features)+len(opposition_features))
+        self.model = model_class(model_path=model_path,in_channels=len(player_features)+len(opposition_features))
+        self.num_features = len(player_features) + len(opposition_features)
+        self.visualize = visualize
 
     def update_model(self):
         if len(self.opposition_features) == 0:
-            historical_data = data_object.get_historical_player_data_by_feature_set(self.player_features)[:,:,1:].astype(np.float)
+            historical_data = self.data_object.get_historical_player_data_by_feature_set(self.player_features)[:,:,1:].astype(np.float)
         else:
-            historical_data = data_object.get_historical_player_opponent_data_by_feature_set(self.player_features, self.opposition_features)[:,:,1:].astype(np.float)
-        train_loader, test_loader = data_object.get_training_data_tensor(historical_data)
-        self.model.fit_loader(train_loader)
+            historical_data = self.data_object.get_historical_player_opponent_data_by_feature_set(self.player_features, self.opposition_features)[:,:,1:].astype(np.float)
+        train_loader, test_loader = self.data_object.get_training_data_tensor(historical_data, num_features=self.num_features)
+        self.model.fit(train_loader)
         self.model.save()
-        print('model saved, loss = ', self.model.eval_loader(test_loader))
+        print('model saved, loss = ', self.model.eval(test_loader))
+        if self.visualize:
+            self.model.visualize_predictions(test_loader, self.player_features + self.opposition_features)
     
     def predict_next_performance(self) -> pd.DataFrame:
         if len(self.opposition_features) == 0:
             recent_data = self.data_object.get_recent_player_data_by_features(self.player_features)
         else:
-            recent_data = self.data_object.get_recent_player_opponent_data_by_feature_set(self.player_features, self.opposition_features)[:,:,1:].astype(np.float)
+            recent_data = self.data_object.get_recent_player_opponent_data_by_feature_set(self.player_features, self.opposition_features)
         self.model.load()
         recent_performances = recent_data[:,:,1:].astype(np.float)
         player_names = recent_data[:,0,0]
-        next_performance = self.model.predict(recent_performances)
+        input_feature = torch.tensor(recent_performances).double().reshape(*self.model.in_shape)
+        next_performance = self.model.model.forward(input_feature).detach().numpy().reshape((-1, ))
         next_performance_dataframe = pd.DataFrame(columns=['name', 'predicted_total_points'])
         next_performance_dataframe['name'] = player_names
         next_performance_dataframe['predicted_total_points'] = next_performance
@@ -127,9 +137,12 @@ class Agent:
     
 if __name__ == "__main__":
     player_features = ['total_points', 'yellow_cards', 'assists', 'ict_index', 'saves', 'goals_scored', 'goals_conceded']
-    opposition_features = ["npxG", "npxGA"]
+    player_features = ['total_points', 'ict_index', 'goals_scored', 'assists', 'clean_sheets']
+    opposition_features = [ "npxGA"]
     data_object = data.Data()
-    agent = Agent(data_object=data_object, player_features=player_features, opposition_features=[], model_class=SimpleConvModel)
-    #agent.update_model()
+    #agent = Agent(data_object=data_object, player_features=player_features, opposition_features=[], model_class=SimpleConvModel, model_path="./trained_models/simple_conv_model.pt")
+    #agent = Agent(data_object=data_object, player_features=player_features, opposition_features=[], model_class=LinearPytorchModel, model_path="./trained_models/simple_linear_model.pt")
+    agent = Agent(data_object=data_object, player_features=player_features, opposition_features=opposition_features, model_class=LinearPytorchModel, model_path="./trained_models/simple_linear_model_opposition.pt", visualize = False)
+    agent.update_model()
     new_squad = asyncio.run(agent.get_new_squad())
     print(new_squad)

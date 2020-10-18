@@ -1,12 +1,16 @@
 import pandas as pd
+import torch
+import numpy as np
+import random
+from random import shuffle
+np.random.seed(17)
+random.seed(17)
+torch.manual_seed(17)
 import wget
 import os
 import aiohttp
 import asyncio
 from fpl import FPL
-import numpy as np
-from random import shuffle
-import torch
 from torch.utils.data import TensorDataset, DataLoader
 
 class Data:
@@ -135,9 +139,13 @@ class Data:
             if(team_history is not None):
                 team_history = pd.pivot(index="id", columns="index", values=feature, data=team_history)
                 team_feature = pd.concat((team_feature, team_history))
+        team_feature = pd.DataFrame(team_feature)
+        team_feature = team_feature.rolling(3, axis = 1).mean().shift(periods=1, axis=1)
+        team_feature.fillna(0, inplace=True)
+        team_feature[0] = 0
         return team_feature
 
-    def get_opponent_feature(self, feature):
+    def get_opponent_feature(self, feature, window_width=4):
         """Gets opposition data faced by player along dimension
 
         Args:
@@ -152,7 +160,11 @@ class Data:
             for j in range(1, opponents.shape[1]):
                 opponent = int(opponents.iloc[i, j])
                 if opponent != 0:
-                    opponents.iloc[i, j] = team_feature.iloc[opponent-1, j-1]
+                    opponents.iloc[i, j] = team_feature.iloc[opponent-1][j-1]
+        opponents.fillna(0, inplace=True)
+        indices = [i for i in range(1, opponents.shape[1]) if (i % (window_width + 1) != 0)]
+        opponents[indices] = 0
+        opponents[opponents.columns[1:]] = opponents[opponents.columns[1:]].shift(periods=-1, axis=1)
         opponents.fillna(0, inplace=True)
         return opponents
 
@@ -170,6 +182,8 @@ class Data:
         historical_player_data_by_feature_set = self.get_historical_player_data_by_feature_set(player_features)
         historical_opponent_data_by_feature_set = [self.get_opponent_feature(opposition_feature) for opposition_feature in opposition_features]
         historical_opponent_data_by_feature_set  =  np.array(historical_opponent_data_by_feature_set).transpose(1, 0, 2)
+        historical_opponent_data_by_feature_set = np.nan_to_num(historical_opponent_data_by_feature_set)
+
         return np.concatenate((historical_player_data_by_feature_set, historical_opponent_data_by_feature_set), axis=1)
 
     def get_training_data_tensor(self, x, window_width=5, num_features=7, batch_size=50, train_test_split = 0.3) -> (DataLoader, DataLoader):
@@ -194,11 +208,16 @@ class Data:
             trimmed_row = trimmed_row.reshape((num_features, num_windows, window_width))
             trimmed_row = trimmed_row.transpose((1, 0, 2))
             X.extend(trimmed_row)
-        X = torch.tensor(np.array(X).astype(float)).double()
-        shuffle(X)
+        X = np.array(X).astype(float)
+        X = (X - X.min(axis = 0)) / (X.max(axis = 0))
+        X = np.nan_to_num(X, 0)
+        X = torch.tensor(np.array(X)).double()
+
+        #shuffle(X)
         test_length =  int(train_test_split * len(X))
         X_train, Y_train = X[:test_length, :, :window_width-1], X[:test_length, 0:1, -1]
         X_test, Y_test = X[test_length:, :, :window_width-1], X[test_length:, 0:1, -1]
+        print(Y_train[12].sum(), Y_test[12].sum())
 
         train_loader = DataLoader(TensorDataset(X_train, Y_train), batch_size=batch_size)
         test_loader = DataLoader(TensorDataset(X_test, Y_test), batch_size=batch_size)
@@ -285,31 +304,32 @@ if __name__ == "__main__":
     player_features = ['total_points', 'yellow_cards', 'assists', 'ict_index', 'saves', 'goals_scored', 'goals_conceded']
     player_data_by_featureset = data.get_historical_player_data_by_feature_set(player_features)
     assert(player_data_by_featureset.shape[1] == len(player_features))
-    
+    '''
     
     team_feature = data.get_team_feature("npxG")
-    print(team_feature.shape)
+    #print(team_feature)
 
     opponent_feature = data.get_opponent_feature("npxG")
+    print(opponent_feature)
     opponent_feature_sample = opponent_feature[opponent_feature["name"] == "Bruno Miguel Borges Fernandes"]
     print(opponent_feature_sample)
 
+    '''
     print(data.get_historical_player_opponent_data_by_feature_set(player_features, ["npxG"]).shape)
     
     print(data.get_recent_player_data_by_features(['total_points', 'yellow_cards', 'assists', 'ict_index', 'saves', 'goals_scored', 'goals_conceded']).shape)
     print(data.get_recent_player_opponent_data_by_feature_set(player_features, ["npxG"]).shape)
     
-    '''
     current_squad = asyncio.run(data.get_current_squad())
     print(current_squad)
     '''
     
+    
 
     player_features = ['total_points', 'yellow_cards', 'assists', 'ict_index', 'saves', 'goals_scored', 'goals_conceded']
     opposition_features = ["npxG", "npxGA"]
-    historical_player_opponent_data = data.get_historical_player_opponent_data_by_feature_set(player_features, opposition_features)[0:1,:,1:]
-    print(historical_player_opponent_data.shape)
+    historical_player_opponent_data = data.get_historical_player_opponent_data_by_feature_set(player_features, opposition_features)
+    print(historical_player_opponent_data)
 
-    data.get_training_data_tensor(historical_player_opponent_data, num_features=len(player_features)+len(opposition_features))
-
-    '''
+    #data.get_training_data_tensor(historical_player_opponent_data, num_features=len(player_features)+len(opposition_features))
+    
