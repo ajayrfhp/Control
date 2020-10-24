@@ -54,7 +54,8 @@ class Agent:
         recent_performances = recent_data[:,:,1:].astype(np.float)
         player_names = recent_data[:,0,0]
         input_feature = torch.tensor(recent_performances).double()
-        input_feature[:,-len(self.opposition_features):,:-1] = 0
+        #input_feature[:,-len(self.opposition_features):,:-1] = 0
+        #print(input_feature[0])
         input_feature = input_feature.reshape(*self.model.in_shape)
         next_performance = self.model.model.forward(input_feature).detach().numpy().reshape((-1, ))
         next_performance_dataframe = pd.DataFrame(columns=['name', 'predicted_total_points', 'input_feature'])

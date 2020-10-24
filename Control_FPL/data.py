@@ -12,6 +12,7 @@ import aiohttp
 import asyncio
 from fpl import FPL
 from torch.utils.data import TensorDataset, DataLoader
+from player import Player
 
 class Data:
     def __init__(self):
@@ -35,11 +36,8 @@ class Data:
         self.previous_year_teams = pd.read_csv(f"{self.local_root}{self.history_year}/teams.csv")
         self.teams = pd.merge(self.this_year_teams, self.previous_year_teams)
         
-    async def get_latest_player_data(self, chance_of_playing_threshold = 0):
-        """Gets latest player data 
-
-        Args:
-            chance_of_playing_threshold: Chance that player will play in next 2 rounds
+    async def get_latest_player_data(self):
+        """Gets latest player data
         
         Returns:
             Dataframe containing latest information about player
@@ -61,8 +59,6 @@ class Data:
                 except ValueError:
                     print(f"player not found {i}")
         latest_player_data.fillna(0, inplace=True)
-        latest_player_data = latest_player_data[latest_player_data["chance_of_playing_this_round"] >= chance_of_playing_threshold]
-        latest_player_data = latest_player_data[latest_player_data["chance_of_playing_next_round"] >= chance_of_playing_threshold]
         return latest_player_data
 
     def get_historical_player_data_by_feature(self, player_feature) -> pd.DataFrame:
@@ -116,10 +112,20 @@ class Data:
         """
         a = pd.read_csv("./data/2019-20/teams.csv")
         b = pd.read_csv("./data/2020-21/teams.csv")
+        team_normalization = pd.DataFrame()
+        team_normalization["name"] = ["Arsenal" , "Aston Villa", "Bournemouth",  "Brighton",
+            "Burnley", "Chelsea", "Crystal Palace", "Everton", "Fulham", "Leeds", "Leicester", "Liverpool",  "Man City", "Man Utd",
+            "Newcastle", "Norwich", "Sheffield Utd", "Southampton", "Spurs", "Watford", "West Brom", "West Ham", "Wolves" ]
+        team_normalization["normalized_team_names"] = ["Arsenal" , "Aston Villa", "Bournemouth",  "Brighton",
+            "Burnley", "Chelsea", "Crystal Palace", "Everton", "Fulham", "Leeds", "Leicester", "Liverpool", "Manchester City", "Manchester United",
+            "Newcastle United", "Norwich", "Sheffield United", "Southampton", "Tottenham", "Watford", "West Bromwich Albion", "West Ham", "Wolverhampton Wanderers" ]
         teams = pd.merge(b, a, on=['id'], how='outer', suffixes=("", "_prev"))
+        teams = pd.merge(teams, team_normalization, on = ['name'], how = 'outer')
+        teams['name'] = teams['normalized_team_names']
         team_feature = pd.DataFrame()
         for id in range(1, 21):
             team = teams[teams["id"] == id]["name"].values[0]
+            print(team)
             team_file_name = team.replace(" ", "_")
             team_history, team_current = None, None
             if os.path.exists(f"./data/2019-20/understat/understat_{team_file_name}.csv"):
@@ -209,7 +215,11 @@ class Data:
             trimmed_row = trimmed_row.transpose((1, 0, 2))
             X.extend(trimmed_row)
         X = np.array(X).astype(float)
-        X = (X - X.min(axis = 0)) / (X.max(axis = 0))
+        mins = X.min(axis = 0).min(axis=1)
+        maxs = X.max(axis=0).max(axis=1)
+        X = X.transpose((0, 2, 1))
+        X = (X - mins) / maxs
+        X = X.transpose((0, 2, 1))
         X = np.nan_to_num(X, 0)
         X = torch.tensor(np.array(X)).double()
 
@@ -287,9 +297,11 @@ class Data:
                 current_squad.loc[i, "bank"] = bank
             return current_squad
 
-
 if __name__ == "__main__":
-    data = Data()
+    fpl = asyncio.run(get_fpl())
+    asyncio.run(get_players(fpl))
+    
+    #data = Data()
     
     def block1():
         latest_player_data = asyncio.run(data.get_latest_player_data(chance_of_playing_threshold=0))
@@ -334,5 +346,3 @@ if __name__ == "__main__":
         player_features = ['total_points', 'ict_index', 'goals_scored', 'assists', 'clean_sheets']
         opposition_features = ["npxG", "npxGA"]
         data.get_training_data_tensor(historical_player_opponent_data, num_features=len(player_features)+len(opposition_features))
-    
-    block5()

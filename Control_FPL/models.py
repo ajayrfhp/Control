@@ -25,7 +25,7 @@ class Model:
         self.model.train()
         for _ in range(self.epochs):
             for (X_train, Y_train) in train_loader:
-                X_train[:,-self.num_opposition_features,:-1] = 0
+                X_train[:,-self.num_opposition_features:,:-1] = 0
                 X_train = X_train.reshape(*self.in_shape)
                 self.model.zero_grad()
                 predictions = self.model.forward(X_train).reshape((-1, 1))
@@ -41,7 +41,7 @@ class Model:
         self.model.eval()
         total_loss = []
         for (X_test, Y_test) in test_loader:
-            X_test[:,-self.num_opposition_features,:-1] = 0
+            X_test[:,-self.num_opposition_features:,:-1] = 0
             X_test = X_test.reshape(*self.in_shape)
             self.model.zero_grad()
             predictions = self.model.forward(X_test).reshape((-1, 1))
@@ -54,7 +54,7 @@ class Model:
         features = []
         predictions = []
         for (X_test, Y_test) in test_loader:
-            X_test[:,-self.num_opposition_features,:-1] = 0
+            X_test[:,-self.num_opposition_features:,:-1] = 0
             features.append(X_test)
             X_test = X_test.reshape(*self.in_shape)
             prediction = self.model.forward(X_test).reshape((-1, 1))
