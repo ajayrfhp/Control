@@ -105,7 +105,8 @@ def get_teams(team_feature_names, visualize=False):
             teams.append(team)
     return teams
 
-def get_training_datasets(players, teams, window=4, batch_size=5):
+
+def get_training_datasets(players, teams, window=4, batch_size=5, visualize=False):
     player_features_array = []
     opponent_features_array = []
     total_points_array = []
@@ -132,16 +133,25 @@ def get_training_datasets(players, teams, window=4, batch_size=5):
                 opponent_team_correct_feature = np.zeros((opponent_team_feature.shape[0], window))
             opponent_features.append(opponent_team_correct_feature)
             assert(opponent_team_correct_feature.shape[1] == window)
+            if visualize:
+                opponent_team.visualize()
         opponent_features = np.array(opponent_features)
         
         player_features_array.extend(player_features)
         opponent_features_array.extend(opponent_features)
         total_points_array.extend(total_points)
-        
+
+           
     player_features_array = torch.tensor(np.array(player_features_array).astype(float))
     opponent_features_array = torch.tensor(np.array(opponent_features_array).astype(float))
     total_points_array = torch.tensor(np.array(total_points_array).astype(float))
     assert(player_features_array.shape[0] == total_points_array.shape[0])
+
+    player_features_array = player_features_array / torch.amax(player_features_array, dim=(0, 2))
+    opponent_features_array = opponent_features_array / torch.amax(opponent_features_array, dim=(0, 2))
+    total_points_array= total_points_array / torch.amax(total_points_array, dim=(0))
+    
+
 
     indices = np.random.permutation(range(0, len(player_features_array)))
     train_length = int(0.8 * len(indices))
@@ -150,6 +160,7 @@ def get_training_datasets(players, teams, window=4, batch_size=5):
     train_opponent_features_array, test_opponent_features_array = opponent_features_array[indices[:train_length]], opponent_features_array[indices[train_length:]]
     train_total_points_array, test_total_points_array = total_points_array[indices[:train_length]], total_points_array[indices[train_length:]]
     
+
 
 
     train_loader = DataLoader(TensorDataset(train_player_features_array, train_opponent_features_array, train_total_points_array), batch_size=batch_size)
