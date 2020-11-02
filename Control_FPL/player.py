@@ -2,7 +2,7 @@ import numpy as np
 import seaborn as sns
 from matplotlib import pyplot as plt
 class Player:
-    def __init__(self, id, name, integer_position, team, latest_price, num_features=0, player_feature_names=[], window=0, opponents=[]):
+    def __init__(self, id, name, integer_position, team, latest_price, num_features=0, player_feature_names=[], window=0, opponents=[], player_features=[]):
         self.id = id
         self.name = name
         self.position_map = {
@@ -18,6 +18,7 @@ class Player:
         self.player_feature_names = player_feature_names
         self.window = window
         self.opponents = opponents
+        self.player_features = player_features
         pass 
 
     def visualize(self):

@@ -77,17 +77,15 @@ def get_team_features(team_name, team_feature_names=["npxGA"]):
     if os.path.exists(f"./data/2020-21/understat/understat_{team_file_name}.csv"):
         team_current = pd.read_csv(f"./data/2020-21/understat/understat_{team_file_name}.csv")
         team_current = team_current.reset_index()
-        team_current["id"] = id
         team_current["index"] += 39
 
     if os.path.exists(f"./data/2019-20/understat/understat_{team_file_name}.csv"):
         team_history = pd.read_csv(f"./data/2019-20/understat/understat_{team_file_name}.csv")
         team_history = team_history.reset_index()
-        team_history["id"] = id
         team_history["index"] += 1
 
     team_current = pd.concat((team_history, team_current))
-    features = team_current[["id"] + team_feature_names].transpose().values
+    features = team_current[team_feature_names].transpose().values
     return features
 
 
@@ -97,8 +95,7 @@ def get_teams(team_feature_names, visualize=False):
     for team_name in team_names["normalized_team_name"].values:
         team_features = get_team_features(team_name, team_feature_names)
         if team_features.shape[0]:
-            id = team_features[0,0]
-            team = Team( name=team_name, team_feature_names=team_feature_names, team_features=team_features[1:], window=4)
+            team = Team( name=team_name, team_feature_names=team_feature_names, team_features=team_features, window=4)
             if visualize:
                 print(team.window)
                 team.visualize()
@@ -106,62 +103,41 @@ def get_teams(team_feature_names, visualize=False):
     return teams
 
 
-def get_training_datasets(players, teams, window=4, batch_size=5, visualize=False):
+def get_training_datasets(players, teams, window=4, batch_size=50, visualize=False):
     player_features_array = []
     opponent_features_array = []
     total_points_array = []
+    window += 1 # data processor window (input window + output feature)
     for player in players:
         player_features = player.player_features # ( D * L matrix)
         opponents = player.opponents # (1 * L matrix)
         
-        # Break (D*L) matrices into (num*D*window) where num = int( L / window)
-        num_windows = player_features.shape[1] // (window+1)
-        player_features = player_features[:,:(1+window) * num_windows]
-        opponents = opponents[:,:(1+window) * num_windows]
-        indices = np.arange(0, (1+window) * num_windows)
-        player_features = player_features.reshape((-1, player_features.shape[0], window+1))[:,:,:-1]
-        opponents = opponents.reshape((-1, 1, window+1))[:,0,-1]
-        indices = indices.reshape((-1, 1, window+1))[:, 0, -1]
-        total_points = player_features[:,0,-1]
-        opponent_features = []
-        for opponent, index in zip(opponents, indices):
-            opponent_team = [team for team in teams if team.name == opponent][0]
-            opponent_team_feature = opponent_team.team_features
-            if opponent_team_feature.shape[1] >= index:
-                opponent_team_correct_feature = opponent_team.team_features[:,(index-window):index]
-            else:
-                opponent_team_correct_feature = np.zeros((opponent_team_feature.shape[0], window))
-            opponent_features.append(opponent_team_correct_feature)
-            assert(opponent_team_correct_feature.shape[1] == window)
-            if visualize:
-                opponent_team.visualize()
-        opponent_features = np.array(opponent_features)
-        
-        player_features_array.extend(player_features)
-        opponent_features_array.extend(opponent_features)
+        # Break (D * L) matrix into (L - W + 1) D * L matrices
+        player_feature_chunks = [player_features[:,i:i+window] for i in range(player_features.shape[1] - window + 1)]
+        player_feature_chunks = np.array(player_feature_chunks)
+        if player_feature_chunks.shape[0] == 0:
+            continue
+        total_points = player_feature_chunks[:,0,-1]
+        player_feature_chunks = player_feature_chunks[:,:,:-1]
+        opponent_features_chunks = np.zeros((player_feature_chunks.shape[0], teams[0].team_features.shape[0], teams[0].team_features.shape[1]))
+        player_features_array.extend(player_feature_chunks)
+        opponent_features_array.extend(opponent_features_chunks)
         total_points_array.extend(total_points)
 
-           
-    player_features_array = torch.tensor(np.array(player_features_array).astype(float))
-    opponent_features_array = torch.tensor(np.array(opponent_features_array).astype(float))
-    total_points_array = torch.tensor(np.array(total_points_array).astype(float))
-    assert(player_features_array.shape[0] == total_points_array.shape[0])
-
-    player_features_array = player_features_array / torch.amax(player_features_array, dim=(0, 2))
-    opponent_features_array = opponent_features_array / torch.amax(opponent_features_array, dim=(0, 2))
-    total_points_array= total_points_array / torch.amax(total_points_array, dim=(0))
-    
 
 
     indices = np.random.permutation(range(0, len(player_features_array)))
     train_length = int(0.8 * len(indices))
 
+    player_features_array = torch.tensor(np.array(player_features_array).astype(float)).double()
+    opponent_features_array = torch.tensor(np.array(opponent_features_array).astype(float)).double()
+    total_points_array = torch.tensor(np.array(total_points_array).astype(float).reshape((-1, 1))).double()
+
+    #print(player_features_array.shape, opponent_features_array.shape, total_points.shape)
+
     train_player_features_array, test_player_features_array = player_features_array[indices[:train_length]], player_features_array[indices[train_length:]]
     train_opponent_features_array, test_opponent_features_array = opponent_features_array[indices[:train_length]], opponent_features_array[indices[train_length:]]
-    train_total_points_array, test_total_points_array = total_points_array[indices[:train_length]], total_points_array[indices[train_length:]]
-    
-
-
+    train_total_points_array, test_total_points_array = total_points_array[indices[:train_length]], total_points_array[indices[train_length:]]    
 
     train_loader = DataLoader(TensorDataset(train_player_features_array, train_opponent_features_array, train_total_points_array), batch_size=batch_size)
     test_loader = DataLoader(TensorDataset(test_player_features_array, test_opponent_features_array, test_total_points_array), batch_size=batch_size)
