@@ -97,7 +97,6 @@ def get_teams(team_feature_names, visualize=False):
         if team_features.shape[0]:
             team = Team( name=team_name, team_feature_names=team_feature_names, team_features=team_features, window=4)
             if visualize:
-                print(team.window)
                 team.visualize()
             teams.append(team)
     return teams
@@ -110,18 +109,27 @@ def get_training_datasets(players, teams, window=4, batch_size=50, visualize=Fal
     window += 1 # data processor window (input window + output feature)
     for player in players:
         player_features = player.player_features # ( D * L matrix)
-        opponents = player.opponents # (1 * L matrix)
+        opponents = player.opponents.reshape((-1, 1)) # (1 * L matrix)
         
-        # Break (D * L) matrix into (L - W + 1) D * L matrices
-        player_feature_chunks = [player_features[:,i:i+window] for i in range(player_features.shape[1] - window + 1)]
+        # Break (D * L) matrix into (L - W + 1) D * W matrices
+        player_feature_chunks = [player_features[:,i:i+window] for i in range(player_features.shape[1] - window )]
         player_feature_chunks = np.array(player_feature_chunks)
+        opponent_chunks = [(i+window, opponents[i+window]) for i in range(player_features.shape[1] - window)]
         if player_feature_chunks.shape[0] == 0:
             continue
         total_points = player_feature_chunks[:,0,-1]
         player_feature_chunks = player_feature_chunks[:,:,:-1]
-        opponent_features_chunks = np.zeros((player_feature_chunks.shape[0], teams[0].team_features.shape[0], teams[0].team_features.shape[1]))
+        opponent_feature_chunks = []
+        for i, opponent in opponent_chunks:
+            for team in teams:
+                if team.name == opponent:
+                    opponent_feature = team.team_features[:,i-window+1:i]
+                    if opponent_feature.shape[1] != window - 1:
+                        opponent_feature = np.zeros((opponent_feature.shape[0], window-1))
+                    opponent_feature_chunks.append(opponent_feature)
+        opponent_feature_chunks = np.array(opponent_feature_chunks)
         player_features_array.extend(player_feature_chunks)
-        opponent_features_array.extend(opponent_features_chunks)
+        opponent_features_array.extend(opponent_feature_chunks)
         total_points_array.extend(total_points)
 
 
@@ -129,15 +137,31 @@ def get_training_datasets(players, teams, window=4, batch_size=50, visualize=Fal
     indices = np.random.permutation(range(0, len(player_features_array)))
     train_length = int(0.8 * len(indices))
 
+    # Normalize player feature array
     player_features_array = torch.tensor(np.array(player_features_array).astype(float)).double()
-    opponent_features_array = torch.tensor(np.array(opponent_features_array).astype(float)).double()
-    total_points_array = torch.tensor(np.array(total_points_array).astype(float).reshape((-1, 1))).double()
+    player_feature_means = torch.mean(player_features_array, dim=(0, 2))
+    player_feature_stds = torch.std(player_features_array, dim=(0, 2))
+    player_features_array = player_features_array.permute(0, 2, 1)
+    player_features_array = (player_features_array - player_feature_means) / (player_feature_stds)
+    player_features_array = player_features_array.permute(0, 2, 1)
 
-    #print(player_features_array.shape, opponent_features_array.shape, total_points.shape)
+    opponent_features_array = torch.tensor(np.array(opponent_features_array).astype(float)).double()
+    opponent_features_means = torch.mean(opponent_features_array, dim=(0, 2))
+    opponent_features_stds = torch.std(opponent_features_array, dim=(0, 2))
+    opponent_features_array = opponent_features_array.permute(0, 2, 1)
+    opponent_features_array = (opponent_features_array - opponent_features_means) / (opponent_features_stds)
+    
+    # Normalize total poitns array
+    total_points_array = torch.tensor(np.array(total_points_array).astype(float).reshape((-1, 1))).double()
+    total_points_means = torch.mean(total_points_array)
+    total_points_stds = torch.std(total_points_array)
+    total_points_array = (total_points_array - total_points_means) / total_points_stds
 
     train_player_features_array, test_player_features_array = player_features_array[indices[:train_length]], player_features_array[indices[train_length:]]
     train_opponent_features_array, test_opponent_features_array = opponent_features_array[indices[:train_length]], opponent_features_array[indices[train_length:]]
-    train_total_points_array, test_total_points_array = total_points_array[indices[:train_length]], total_points_array[indices[train_length:]]    
+    train_total_points_array, test_total_points_array = total_points_array[indices[:train_length]], total_points_array[indices[train_length:]]  
+
+    
 
     train_loader = DataLoader(TensorDataset(train_player_features_array, train_opponent_features_array, train_total_points_array), batch_size=batch_size)
     test_loader = DataLoader(TensorDataset(test_player_features_array, test_opponent_features_array, test_total_points_array), batch_size=batch_size)
