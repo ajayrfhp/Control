@@ -14,6 +14,7 @@ from fpl import FPL
 from torch.utils.data import TensorDataset, DataLoader
 from player import Player
 from team import Team
+from key import *
 
 
 def get_normalized_team_names():
@@ -42,13 +43,14 @@ def get_all_player_features(player_feature_names):
     return all_player_features
 
 
-async def get_players(player_feature_names=["total_points", "ict_index"], visualize=False, num_players=10):
+async def get_players(player_feature_names, team_feature_names, visualize=False, num_players=10):
     """Gets latest player data
     
     Returns:
         List of player objects
     """
     fpl = await get_fpl()
+    teams = get_teams(team_feature_names)
     players = []
     latest_player_data = pd.DataFrame(columns=['name', 'position', 'now_cost', 'element', "chance_of_playing_this_round", "chance_of_playing_next_round"])
     all_player_features =  get_all_player_features(player_feature_names)
@@ -59,15 +61,16 @@ async def get_players(player_feature_names=["total_points", "ict_index"], visual
             integer_position = player_data.element_type
             latest_price = player_data.now_cost
             team = player_data.team
-            player = Player(id=i, name=name, integer_position=integer_position, team=team, latest_price=latest_price, window=4, player_feature_names=player_feature_names)
             player_features = all_player_features[all_player_features["name"] == name].transpose().values[1:]
-            player.player_features = player_features[1:]
-            player.opponents = player_features[:1]
+            player = Player(id=i, name=name, integer_position=integer_position, team=team, 
+                            latest_price=latest_price, window=4, player_feature_names=player_feature_names, teams=teams,
+                            player_features=player_features[1:], opponents=player_features[:1][0])
+            
             if visualize:
                 player.visualize()
             players.append(player)
         except ValueError:
-            print(f"Player {i} does not exist")
+            print(f"player {i} not found")
     return players
 
 def get_team_features(team_name, team_feature_names=["npxGA"]):
@@ -166,6 +169,30 @@ def get_training_datasets(players, teams, window=4, batch_size=50, visualize=Fal
     train_loader = DataLoader(TensorDataset(train_player_features_array, train_opponent_features_array, train_total_points_array), batch_size=batch_size)
     test_loader = DataLoader(TensorDataset(test_player_features_array, test_opponent_features_array, test_total_points_array), batch_size=batch_size)
     return train_loader, test_loader
+
+async def get_current_squad(player_feature_names, team_feature_names, num_players=580) -> pd.DataFrame:
+    """Gets current squad belonging to user
+
+    Returns:
+        Dataframe containing current FPL squad of user
+    """
+    players = await get_players(player_feature_names, team_feature_names, num_players=num_players)
+    async with aiohttp.ClientSession() as session:
+        fpl = FPL(session)
+        await fpl.login(email=email, password=password)
+        user = await fpl.get_user(5645003)
+        bank = (await user.get_transfers_status())["bank"] 
+        squad = await user.get_team()
+        
+    
+        for i, player_element in enumerate(squad):
+            for player in players:
+                if player.id == player_element["element"]:
+                    player.in_current_squad = True
+    
+        current_squad_players = [player for player in players if player.in_current_squad]
+        non_squad_players = [player for player in players if not player.in_current_squad]
+        return current_squad_players, non_squad_players
 
 async def get_fpl():
     async with aiohttp.ClientSession() as session:

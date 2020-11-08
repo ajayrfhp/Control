@@ -9,14 +9,18 @@ from itertools import chain
 import seaborn as sns
 import torch.nn as nn
 import torch.optim as optim
+import asyncio
+import aiohttp
+from data_processor import get_fpl, get_players, get_teams, get_training_datasets
 
 class Model:
-    def __init__(self, player_feature_names, opponent_feature_names, window=4):
+    def __init__(self, player_feature_names, opponent_feature_names, window=4, model_path=None):
         self.player_feature_names = player_feature_names
         self.opponent_feature_names = opponent_feature_names
         self.model = None
         self.window = window
         self.use_opponent_features = False
+        self.model_path = model_path
     
     def fit(self, train_loader):
         pass 
@@ -33,6 +37,7 @@ class Model:
 
     
     def save(self):
+        print(self.model_path)
         if self.model:
             torch.save(self.model.state_dict(), self.model_path)
     
@@ -97,7 +102,7 @@ class AvgScoreModel(Model):
         return torch.cat(player_features), torch.cat(opponent_features), torch.cat(predictions), torch.cat(total_points)
 
 class LinearModel(Model):
-    def __init__(self, player_feature_names, opponent_feature_names, window=4, use_opponent_features=False):
+    def __init__(self, player_feature_names, opponent_feature_names, window=4, model_path=None, use_opponent_features=False):
         self.player_feature_names = player_feature_names
         self.opponent_feature_names = opponent_feature_names
         if use_opponent_features:
@@ -108,6 +113,7 @@ class LinearModel(Model):
         self.window = window
         self.optimizer = optim.Adam(self.model.parameters(), 1e-3)
         self.use_opponent_features = use_opponent_features
+        self.model_path = model_path
 
     def fit(self, train_loader):
         self.model.train()
@@ -125,6 +131,7 @@ class LinearModel(Model):
                 loss = (residual * residual).sum()
                 loss.backward()
                 self.optimizer.step()
+        self.save()
 
     def predict(self, test_loader):
         self.model.eval()
@@ -146,5 +153,23 @@ class LinearModel(Model):
         return torch.cat(player_features), torch.cat(opponent_features), torch.cat(predictions), torch.cat(total_points)    
 
 if __name__ == "__main__":
-    model = PreviousScoreModel()
+    opponent_feature_names = ["npxG","npxGA"]
+    player_feature_names = ["total_points", "ict_index", "clean_sheets", "saves", "assists"]
+    teams = get_teams(team_feature_names=opponent_feature_names, visualize=False)
+    players = asyncio.run(get_players(player_feature_names, opponent_feature_names, visualize=False, num_players=580))
+    train_loader, test_loader = get_training_datasets(players, teams)
+    previous_score_model = PreviousScoreModel(player_feature_names, opponent_feature_names)
+    player_avg_score_model = PlayerAvgScoreModel(player_feature_names, opponent_feature_names)
+    player_linear_score_model = LinearModel(player_feature_names, opponent_feature_names, 
+        model_path="./trained_models/player_linear_score_model.pt")
+    player_opponent_linear_score_model = LinearModel(player_feature_names, opponent_feature_names, use_opponent_features=True,
+        model_path="./trained_models/player_oppponent_linear_score_model.pt")
+    player_linear_score_model.fit(train_loader)
+    player_opponent_linear_score_model.fit(train_loader)
+    player_opponent_linear_score_model.load()
+    print(previous_score_model.eval(test_loader))
+    print(player_avg_score_model.eval(test_loader))
+    print(player_linear_score_model.eval(test_loader))
+    print(player_opponent_linear_score_model.eval(test_loader))
+    
 
