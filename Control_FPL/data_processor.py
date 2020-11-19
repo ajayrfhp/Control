@@ -49,29 +49,45 @@ async def get_players(player_feature_names, team_feature_names, visualize=False,
     Returns:
         List of player objects
     """
-    fpl = await get_fpl()
-    teams = get_teams(team_feature_names)
-    players = []
-    latest_player_data = pd.DataFrame(columns=['name', 'position', 'now_cost', 'element', "chance_of_playing_this_round", "chance_of_playing_next_round"])
-    all_player_features =  get_all_player_features(player_feature_names)
-    for i in range(1, num_players):
-        try:
+    normalized_team_names = get_normalized_team_names()
+    manual_injuries = ["Matt Doherty", "Danny Ings", "Jonjo Shelvey", "Mohammed Salah"]
+    async with aiohttp.ClientSession() as session:
+        fpl = FPL(session) 
+        teams = get_teams(team_feature_names)
+        players = []
+        all_player_features =  get_all_player_features(player_feature_names)
+        for i in range(1, num_players):
+            #try:
             player_data = await fpl.get_player(i)
             name = player_data.first_name + " " + player_data.second_name
             integer_position = player_data.element_type
             latest_price = player_data.now_cost
-            team = player_data.team
-            player_features = all_player_features[all_player_features["name"] == name].transpose().values[1:]
-            player = Player(id=i, name=name, integer_position=integer_position, team=team, 
-                            latest_price=latest_price, window=4, player_feature_names=player_feature_names, teams=teams,
-                            player_features=player_features[1:], opponents=player_features[:1][0])
+            team = await fpl.get_team(player_data.team)
+            fixtures = await team.get_fixtures(return_json=True)
+            latest_opponent = fixtures[0]["team_h"]
+            if fixtures[0]["team_h"] == player_data.team:
+                latest_opponent = fixtures[0]["team_a"]
+            latest_opponent = await fpl.get_team(latest_opponent)
+            latest_opponent = normalized_team_names[normalized_team_names["name_2019"] == latest_opponent.name]["normalized_team_name"].values[0]
+            latest_opponent = [team for team in teams if team.name == latest_opponent][0]
             
+            chance_of_playing_this_round = player_data.chance_of_playing_this_round if player_data.chance_of_playing_this_round is not None else 100
+
+            player_features = all_player_features[all_player_features["name"] == name].transpose().values[1:]
+            player = Player(id=i, name=name, integer_position=integer_position, team=team.name, 
+                            latest_price=latest_price, window=4, player_feature_names=player_feature_names, teams=teams,
+                            player_features=player_features[1:], latest_opponent=latest_opponent,opponents=player_features[:1][0],
+                            chance_of_playing_this_round=chance_of_playing_this_round)
+            if player.name in manual_injuries:
+                player.chance_of_playing_this_round = 0
             if visualize:
                 player.visualize()
             players.append(player)
-        except ValueError:
-            print(f"player {i} not found")
-    return players
+            '''
+            except ValueError:
+                print(f"player {i} not found")
+            '''
+        return players
 
 def get_team_features(team_name, team_feature_names=["npxGA"]):
     team_file_name = team_name.replace(" ", "_")
@@ -142,11 +158,13 @@ def get_training_datasets(players, teams, window=4, batch_size=50, visualize=Fal
 
     # Normalize player feature array
     player_features_array = torch.tensor(np.array(player_features_array).astype(float)).double()
-    player_feature_means = torch.mean(player_features_array, dim=(0, 2))
-    player_feature_stds = torch.std(player_features_array, dim=(0, 2))
+    player_features_means = torch.mean(player_features_array, dim=(0, 2))
+    player_features_stds = torch.std(player_features_array, dim=(0, 2))
     player_features_array = player_features_array.permute(0, 2, 1)
-    player_features_array = (player_features_array - player_feature_means) / (player_feature_stds)
+    player_features_array = (player_features_array - player_features_means) / (player_features_stds)
     player_features_array = player_features_array.permute(0, 2, 1)
+
+    
 
     opponent_features_array = torch.tensor(np.array(opponent_features_array).astype(float)).double()
     opponent_features_means = torch.mean(opponent_features_array, dim=(0, 2))
@@ -168,7 +186,7 @@ def get_training_datasets(players, teams, window=4, batch_size=50, visualize=Fal
 
     train_loader = DataLoader(TensorDataset(train_player_features_array, train_opponent_features_array, train_total_points_array), batch_size=batch_size)
     test_loader = DataLoader(TensorDataset(test_player_features_array, test_opponent_features_array, test_total_points_array), batch_size=batch_size)
-    return train_loader, test_loader
+    return train_loader, test_loader, (player_features_means, player_features_stds, opponent_features_means, opponent_features_stds, total_points_means, total_points_stds)
 
 async def get_current_squad(player_feature_names, team_feature_names, num_players=580) -> pd.DataFrame:
     """Gets current squad belonging to user
@@ -189,7 +207,10 @@ async def get_current_squad(player_feature_names, team_feature_names, num_player
             for player in players:
                 if player.id == player_element["element"]:
                     player.in_current_squad = True
-    
+                    player.bank = bank
+
+
+
         current_squad_players = [player for player in players if player.in_current_squad]
         non_squad_players = [player for player in players if not player.in_current_squad]
         return current_squad_players, non_squad_players
@@ -203,8 +224,7 @@ if __name__ == "__main__":
     fpl = asyncio.run(get_fpl())
     players = asyncio.run(get_players(["total_points", "ict_index", 'goals_scored', 'assists', 'clean_sheets', "goals_conceded", "saves"], visualize=False, num_players=600))
     teams = get_teams(team_feature_names=["npxGA", "npxG", "scored", "xG","xGA","xpts"], visualize=False)
-    train_loader, test_loader = get_training_datasets(players, teams)
+    train_loader, test_loader,_ = get_training_datasets(players, teams)
     #print(players)
     #print(teams)
     #print(get_normalized_team_names())
-

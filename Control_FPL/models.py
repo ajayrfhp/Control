@@ -38,11 +38,11 @@ class Model:
     
     def save(self):
         print(self.model_path)
-        if self.model:
+        if self.model and self.model_path:
             torch.save(self.model.state_dict(), self.model_path)
     
     def load(self):
-        if self.model:
+        if self.model and self.model_path:
             self.model.load_state_dict(torch.load(self.model_path))  
     
     def visualize_predictions(self, test_loader):
@@ -157,7 +157,7 @@ if __name__ == "__main__":
     player_feature_names = ["total_points", "ict_index", "clean_sheets", "saves", "assists"]
     teams = get_teams(team_feature_names=opponent_feature_names, visualize=False)
     players = asyncio.run(get_players(player_feature_names, opponent_feature_names, visualize=False, num_players=580))
-    train_loader, test_loader = get_training_datasets(players, teams)
+    train_loader, test_loader, _ = get_training_datasets(players, teams)
     previous_score_model = PreviousScoreModel(player_feature_names, opponent_feature_names)
     player_avg_score_model = PlayerAvgScoreModel(player_feature_names, opponent_feature_names)
     player_linear_score_model = LinearModel(player_feature_names, opponent_feature_names, 
