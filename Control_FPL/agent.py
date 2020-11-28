@@ -15,14 +15,13 @@ from torch.utils.data import TensorDataset, DataLoader
 from player import Player
 from team import Team
 from data_processor import get_fpl, get_current_squad, get_teams, get_players, get_training_datasets
-from models import LinearModel
+from models import HierarchialLinearModel
 
 class Agent:
     def __init__(self, player_feature_names, opponent_feature_names, model_path):
         self.player_feature_names = player_feature_names
         self.opponent_feature_names = opponent_feature_names
-        self.model = LinearModel(player_feature_names, opponent_feature_names, 
-                            use_opponent_features=True,
+        self.model = HierarchialLinearModel(player_feature_names, opponent_feature_names, 
                             model_path=model_path)
         self.players = None
     
@@ -46,7 +45,7 @@ class Agent:
         optimal_trade = None
         for player_out in current_squad:
             for player_in in non_squad:
-                if player_in.position == player_out.position and player_in.latest_price + player_out.bank <= player_out.latest_price:
+                if player_in.position == player_out.position and player_in.latest_price  <= player_out.latest_price + player_out.bank:
                     trade_gain = player_in.predicted_performance - player_out.predicted_performance
                     if trade_gain > optimal_trade_gain:
                         optimal_trade_gain = trade_gain

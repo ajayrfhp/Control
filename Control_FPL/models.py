@@ -101,6 +101,7 @@ class AvgScoreModel(Model):
             total_points.append(total_point)
         return torch.cat(player_features), torch.cat(opponent_features), torch.cat(predictions), torch.cat(total_points)
 
+
 class LinearModel(Model):
     def __init__(self, player_feature_names, opponent_feature_names, window=4, model_path=None, use_opponent_features=False):
         self.player_feature_names = player_feature_names
@@ -117,7 +118,7 @@ class LinearModel(Model):
 
     def fit(self, train_loader):
         self.model.train()
-        for i in range(10):
+        for _ in range(10):
             for (player_feature, opponent_feature, total_point) in train_loader:
                 self.optimizer.zero_grad()
                 if self.use_opponent_features:
@@ -151,6 +152,70 @@ class LinearModel(Model):
             player_features.append(player_feature)
             total_points.append(total_point)
         return torch.cat(player_features), torch.cat(opponent_features), torch.cat(predictions), torch.cat(total_points)    
+
+class HierarchialLinearModel(Model):
+    def __init__(self, player_feature_names, opponent_feature_names, window=4, model_path=None):
+        '''
+            Player (D, L) -> (1, )    ->
+            Opponent (D, L) -> (D, )  ->     Prediction
+        '''
+        self.player_feature_names = player_feature_names
+        self.opponent_feature_names = opponent_feature_names
+        self.features = self.player_feature_names + self.opponent_feature_names
+        self.player_model = nn.Sequential(*[nn.Linear(len(self.player_feature_names) * window, 1)]).double()
+        self.model = nn.Sequential(*[nn.Linear(len(self.opponent_feature_names) + 1, 1)]).double()
+        self.window = window
+        self.optimizer = optim.Adam(list(self.model.parameters()) + list(self.player_model.parameters()), 1e-3)
+        self.model_path = model_path
+
+    def fit(self, train_loader):
+        self.model.train()
+        for _ in range(10):
+            for (player_feature, opponent_feature, total_point) in train_loader:
+                self.optimizer.zero_grad()
+                player_feature = player_feature.reshape((-1, self.window * len(self.player_feature_names)))
+                player_score = self.player_model.forward(player_feature) #(N, 1)
+                opponent_feature = torch.mean(opponent_feature, dim=-1) #(N, D)
+                input_feature = torch.cat((player_score, opponent_feature), dim=-1) #(N, D + 1)             
+                prediction = self.model.forward(input_feature)
+                residual = prediction - total_point
+                loss = (residual * residual).sum()
+                loss.backward()
+                self.optimizer.step()
+        self.save()
+
+    def predict(self, test_loader):
+        self.model.eval()
+        player_features, opponent_features = [], []
+        predictions = []
+        total_points = []
+        for (player_feature, opponent_feature, total_point) in test_loader:
+            player_feature = player_feature.reshape((-1, self.window * len(self.player_feature_names)))
+            player_score = self.player_model.forward(player_feature) #(N, 1)
+            opponent_feature = torch.mean(opponent_feature, dim=-1) #(N, D)
+            input_feature = torch.cat((player_score, opponent_feature), dim=-1) #(N, D + 1)    
+            prediction = self.model.forward(input_feature)
+            predictions.append(prediction)
+            opponent_features.append(opponent_feature)
+            player_features.append(player_feature)
+            total_points.append(total_point)
+        return torch.cat(player_features), torch.cat(opponent_features), torch.cat(predictions), torch.cat(total_points)
+
+    def visualize_predictions(self, test_loader):
+        player_features, opponent_features, predictions, total_points = self.predict(test_loader)
+        print(player_features.shape)
+        top_score_indices = torch.argsort(predictions, dim=0, descending=True)[0:10]
+        bottom_score_indices = torch.argsort(predictions, dim=0)[0:10]
+        indices = torch.cat((top_score_indices, bottom_score_indices))
+        for top_score_index in indices:
+            score = float(predictions[top_score_index.item()].item())
+            feature = player_features[top_score_index.item()].reshape((len(self.player_feature_names), self.window))
+            opponent_feature = opponent_features[top_score_index.item()].reshape((len(self.opponent_feature_names), 1))
+            plt.title(score)
+            sns.heatmap(feature.numpy(), yticklabels=self.player_feature_names, cmap = sns.light_palette("seagreen", as_cmap = True), vmin = 0, vmax = 1)
+            plt.show()
+            sns.heatmap(opponent_feature.numpy(), yticklabels=self.opponent_feature_names, cmap = sns.light_palette("seagreen", as_cmap = True), vmin=0, vmax=1)
+            plt.show()
 
 if __name__ == "__main__":
     opponent_feature_names = ["npxG","npxGA"]
