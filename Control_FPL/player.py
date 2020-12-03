@@ -56,12 +56,9 @@ class Player:
         latest_opponent_features_array = latest_opponent_features_array.permute(0, 2, 1)
 
         player_feature = torch.tensor(latest_player_features_array.reshape((-1, self.window * len(self.player_feature_names)))).double()
-        opponent_feature = torch.tensor(latest_opponent_features_array).double()
-
-        player_score = model.player_model.forward(player_feature) #(N, 1)
-        opponent_feature = torch.mean(opponent_feature, dim=-1) #(N, D)
-        input_feature = torch.cat((player_score, opponent_feature), dim=-1) #(N, D + 1)
+        opponent_feature = torch.tensor(latest_opponent_features_array.reshape((-1, self.window * len(self.latest_opponent.team_feature_names)))).double()
+        input_feature = torch.cat((player_feature, opponent_feature), dim=-1)
         unnormalized_prediction = model.model.forward(input_feature).detach()[0][0]
-        self.predicted_performance = ((total_points_stds * unnormalized_prediction) + total_points_means).item() 
+        self.predicted_performance = ((total_points_stds * unnormalized_prediction) + total_points_means).item()
 
 

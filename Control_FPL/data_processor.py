@@ -121,7 +121,7 @@ def get_teams(team_feature_names, visualize=False):
     return teams
 
 
-def get_training_datasets(players, teams, window=4, batch_size=50, visualize=False):
+def get_training_datasets(players, teams, window=4, batch_size=50, visualize=False, autoregressive=False):
     player_features_array = []
     opponent_features_array = []
     total_points_array = []
@@ -131,9 +131,10 @@ def get_training_datasets(players, teams, window=4, batch_size=50, visualize=Fal
         opponents = player.opponents.reshape((-1, 1)) # (1 * L matrix)
         
         # Break (D * L) matrix into (L - W + 1) D * W matrices
-        player_feature_chunks = [player_features[:,i:i+window] for i in range(player_features.shape[1] - window )]
+        choice = np.random.choice([0])
+        player_feature_chunks = [player_features[:,i:i+window] for i in range(player_features.shape[1] - window - choice)]
         player_feature_chunks = np.array(player_feature_chunks)
-        opponent_chunks = [(i+window, opponents[i+window]) for i in range(player_features.shape[1] - window)]
+        opponent_chunks = [(i+window + choice, opponents[i+window + choice]) for i in range(player_features.shape[1] - window - choice)]
         if player_feature_chunks.shape[0] == 0:
             continue
         total_points = player_feature_chunks[:,0,-1]
@@ -151,43 +152,71 @@ def get_training_datasets(players, teams, window=4, batch_size=50, visualize=Fal
         opponent_features_array.extend(opponent_feature_chunks)
         total_points_array.extend(total_points)
 
+    if autoregressive:
+        # Concatenate player and opponent features. 
+        player_features_array = np.array(player_features_array) # (N, D1, W)
+        opponent_features_array = np.array(opponent_features_array) # (N, D2, W)
+        player_features_array = np.concatenate((player_features_array, opponent_features_array), axis=1) # (N, D1 + D2, W)
+
+        indices = np.random.permutation(range(0, len(player_features_array)))
+        train_length = int(0.8 * len(indices))
+
+        # Normalize player feature array
+        player_features_array = torch.tensor(np.array(player_features_array).astype(float)).double()
+        player_features_means = torch.mean(player_features_array, dim=(0, 2))
+        player_features_stds = torch.std(player_features_array, dim=(0, 2))
+        player_features_array = player_features_array.permute(0, 2, 1)
+        player_features_array = (player_features_array - player_features_means) / (player_features_stds)
+        player_features_array = player_features_array.permute(0, 2, 1)
+
+        # Normalize total poitns array
+        total_points_array = torch.tensor(np.array(total_points_array).astype(float).reshape((-1, 1))).double()
+        total_points_means = torch.mean(total_points_array)
+        total_points_stds = torch.std(total_points_array)
+        total_points_array = (total_points_array - total_points_means) / total_points_stds
+
+        train_player_features_array, test_player_features_array = player_features_array[indices[:train_length]], player_features_array[indices[train_length:]]
+        train_total_points_array, test_total_points_array = total_points_array[indices[:train_length]], total_points_array[indices[train_length:]]  
+        train_loader = DataLoader(TensorDataset(train_player_features_array, train_total_points_array), batch_size=batch_size)
+        test_loader = DataLoader(TensorDataset(test_player_features_array,  test_total_points_array), batch_size=batch_size)
+        return train_loader, test_loader, (player_features_means, player_features_stds, total_points_means, total_points_stds)
+    else:
+        indices = np.random.permutation(range(0, len(player_features_array)))
+        train_length = int(0.8 * len(indices))
+
+        # Normalize player feature array
+        player_features_array = torch.tensor(np.array(player_features_array).astype(float)).double()
+        player_features_means = torch.mean(player_features_array, dim=(0, 2))
+        player_features_stds = torch.std(player_features_array, dim=(0, 2))
+        player_features_array = player_features_array.permute(0, 2, 1)
+        player_features_array = (player_features_array - player_features_means) / (player_features_stds)
+        player_features_array = player_features_array.permute(0, 2, 1)
+
+        
+        opponent_features_array = torch.tensor(np.array(opponent_features_array).astype(float)).double()
+        opponent_features_means = torch.mean(opponent_features_array, dim=(0, 2))
+        opponent_features_stds = torch.std(opponent_features_array, dim=(0, 2))
+        opponent_features_array = opponent_features_array.permute(0, 2, 1)
+        opponent_features_array = (opponent_features_array - opponent_features_means) / (opponent_features_stds)
+        opponent_features_array = opponent_features_array.permute(0, 2, 1) #(N, D, T)
+        
+        # Normalize total poitns array
+        total_points_array = torch.tensor(np.array(total_points_array).astype(float).reshape((-1, 1))).double()
+        total_points_means = torch.mean(total_points_array)
+        total_points_stds = torch.std(total_points_array)
+        total_points_array = (total_points_array - total_points_means) / total_points_stds
+
+        train_player_features_array, test_player_features_array = player_features_array[indices[:train_length]], player_features_array[indices[train_length:]]
+        train_opponent_features_array, test_opponent_features_array = opponent_features_array[indices[:train_length]], opponent_features_array[indices[train_length:]]
+        train_total_points_array, test_total_points_array = total_points_array[indices[:train_length]], total_points_array[indices[train_length:]]  
+
+        
+
+        train_loader = DataLoader(TensorDataset(train_player_features_array, train_opponent_features_array, train_total_points_array), batch_size=batch_size)
+        test_loader = DataLoader(TensorDataset(test_player_features_array, test_opponent_features_array, test_total_points_array), batch_size=batch_size)
+        return train_loader, test_loader, (player_features_means, player_features_stds, opponent_features_means, opponent_features_stds, total_points_means, total_points_stds)
 
 
-    indices = np.random.permutation(range(0, len(player_features_array)))
-    train_length = int(0.8 * len(indices))
-
-    # Normalize player feature array
-    player_features_array = torch.tensor(np.array(player_features_array).astype(float)).double()
-    player_features_means = torch.mean(player_features_array, dim=(0, 2))
-    player_features_stds = torch.std(player_features_array, dim=(0, 2))
-    player_features_array = player_features_array.permute(0, 2, 1)
-    player_features_array = (player_features_array - player_features_means) / (player_features_stds)
-    player_features_array = player_features_array.permute(0, 2, 1)
-
-    
-
-    opponent_features_array = torch.tensor(np.array(opponent_features_array).astype(float)).double()
-    opponent_features_means = torch.mean(opponent_features_array, dim=(0, 2))
-    opponent_features_stds = torch.std(opponent_features_array, dim=(0, 2))
-    opponent_features_array = opponent_features_array.permute(0, 2, 1)
-    opponent_features_array = (opponent_features_array - opponent_features_means) / (opponent_features_stds)
-    opponent_features_array = opponent_features_array.permute(0, 2, 1) #(N, D, T)
-    
-    # Normalize total poitns array
-    total_points_array = torch.tensor(np.array(total_points_array).astype(float).reshape((-1, 1))).double()
-    total_points_means = torch.mean(total_points_array)
-    total_points_stds = torch.std(total_points_array)
-    total_points_array = (total_points_array - total_points_means) / total_points_stds
-
-    train_player_features_array, test_player_features_array = player_features_array[indices[:train_length]], player_features_array[indices[train_length:]]
-    train_opponent_features_array, test_opponent_features_array = opponent_features_array[indices[:train_length]], opponent_features_array[indices[train_length:]]
-    train_total_points_array, test_total_points_array = total_points_array[indices[:train_length]], total_points_array[indices[train_length:]]  
-
-    
-
-    train_loader = DataLoader(TensorDataset(train_player_features_array, train_opponent_features_array, train_total_points_array), batch_size=batch_size)
-    test_loader = DataLoader(TensorDataset(test_player_features_array, test_opponent_features_array, test_total_points_array), batch_size=batch_size)
-    return train_loader, test_loader, (player_features_means, player_features_stds, opponent_features_means, opponent_features_stds, total_points_means, total_points_stds)
 
 async def get_current_squad(player_feature_names, team_feature_names, num_players=580) -> pd.DataFrame:
     """Gets current squad belonging to user

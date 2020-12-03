@@ -21,6 +21,7 @@ class Model:
         self.window = window
         self.use_opponent_features = False
         self.model_path = model_path
+        self.use_opponent_features = False
     
     def fit(self, train_loader):
         pass 
@@ -216,6 +217,52 @@ class HierarchialLinearModel(Model):
             plt.show()
             sns.heatmap(opponent_feature.numpy(), yticklabels=self.opponent_feature_names, cmap = sns.light_palette("seagreen", as_cmap = True), vmin=0, vmax=1)
             plt.show()
+
+
+class NonLinearModel(Model):
+    def __init__(self, player_feature_names, opponent_feature_names, window=4, model_path=None,):
+        self.player_feature_names = player_feature_names
+        self.opponent_feature_names = opponent_feature_names
+        self.features = self.player_feature_names + self.opponent_feature_names
+        self.model = nn.Sequential(*[nn.Linear(len(self.features) * window, 30),
+                                     nn.ReLU(), 
+                                     nn.Linear(30, 1)]).double()
+        self.window = window
+        self.optimizer = optim.Adam(self.model.parameters(), 1e-3)
+        self.model_path = model_path
+        self.use_opponent_features = True
+
+    def fit(self, train_loader):
+        self.model.train()
+        for _ in range(30):
+            for (player_feature, opponent_feature, total_point) in train_loader:
+                self.optimizer.zero_grad()
+                player_feature = player_feature.reshape((-1, self.window * len(self.player_feature_names)))
+                opponent_feature = opponent_feature.reshape((-1, self.window * len(self.opponent_feature_names)))
+                input_feature = torch.cat((player_feature, opponent_feature), dim=-1)             
+                prediction = self.model.forward(input_feature)
+                residual = prediction - total_point
+                loss = (residual * residual).sum()
+                loss.backward()
+                self.optimizer.step()
+        self.save()
+
+    def predict(self, test_loader):
+        self.model.eval()
+        player_features, opponent_features = [], []
+        predictions = []
+        total_points = []
+        for (player_feature, opponent_feature, total_point) in test_loader:
+            player_feature = player_feature.reshape((-1, self.window * len(self.player_feature_names)))
+            opponent_feature = opponent_feature.reshape((-1, self.window * len(self.opponent_feature_names)))
+            input_feature = torch.cat((player_feature, opponent_feature), dim=-1)             
+            prediction = self.model.forward(input_feature)
+            prediction = self.model.forward(input_feature)
+            predictions.append(prediction)
+            opponent_features.append(opponent_feature)
+            player_features.append(player_feature)
+            total_points.append(total_point)
+        return torch.cat(player_features), torch.cat(opponent_features), torch.cat(predictions), torch.cat(total_points)    
 
 if __name__ == "__main__":
     opponent_feature_names = ["npxG","npxGA"]
