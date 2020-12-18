@@ -40,6 +40,7 @@ def get_all_player_features(player_feature_names):
     game_weeks["opponent"] = game_weeks["normalized_team_name"]
     all_player_features = game_weeks[["name", "opponent"] + player_feature_names]
     all_player_features.fillna(0, inplace=True)
+    all_player_features["total_points"] = all_player_features["total_points"].clip(0, 12)
     return all_player_features
 
 
@@ -50,7 +51,7 @@ async def get_players(player_feature_names, team_feature_names, visualize=False,
         List of player objects
     """
     normalized_team_names = get_normalized_team_names()
-    manual_injuries = ["Matt Doherty", "Danny Ings", "Jonjo Shelvey", "Mohammed Salah"]
+    manual_injuries = ["Diego Jota"]
     async with aiohttp.ClientSession() as session:
         fpl = FPL(session) 
         teams = get_teams(team_feature_names)
@@ -125,6 +126,7 @@ def get_training_datasets(players, teams, window=4, batch_size=50, visualize=Fal
     player_features_array = []
     opponent_features_array = []
     total_points_array = []
+    points_this_season_array = []
     window += 1 # data processor window (input window + output feature)
     for player in players:
         player_features = player.player_features # ( D * L matrix)
@@ -135,6 +137,7 @@ def get_training_datasets(players, teams, window=4, batch_size=50, visualize=Fal
         player_feature_chunks = [player_features[:,i:i+window] for i in range(player_features.shape[1] - window - choice)]
         player_feature_chunks = np.array(player_feature_chunks)
         opponent_chunks = [(i+window + choice, opponents[i+window + choice]) for i in range(player_features.shape[1] - window - choice)]
+        points_this_season = [player_features[0, :i+window].sum() for i in range(player_features.shape[1] - window - choice)]
         if player_feature_chunks.shape[0] == 0:
             continue
         total_points = player_feature_chunks[:,0,-1]
@@ -147,10 +150,12 @@ def get_training_datasets(players, teams, window=4, batch_size=50, visualize=Fal
                     if opponent_feature.shape[1] != window - 1:
                         opponent_feature = np.zeros((opponent_feature.shape[0], window-1))
                     opponent_feature_chunks.append(opponent_feature)
+        
         opponent_feature_chunks = np.array(opponent_feature_chunks)
         player_features_array.extend(player_feature_chunks)
         opponent_features_array.extend(opponent_feature_chunks)
         total_points_array.extend(total_points)
+        points_this_season_array.extend(points_this_season)
 
     if autoregressive:
         # Concatenate player and opponent features. 
@@ -206,15 +211,25 @@ def get_training_datasets(players, teams, window=4, batch_size=50, visualize=Fal
         total_points_stds = torch.std(total_points_array)
         total_points_array = (total_points_array - total_points_means) / total_points_stds
 
-        train_player_features_array, test_player_features_array = player_features_array[indices[:train_length]], player_features_array[indices[train_length:]]
-        train_opponent_features_array, test_opponent_features_array = opponent_features_array[indices[:train_length]], opponent_features_array[indices[train_length:]]
-        train_total_points_array, test_total_points_array = total_points_array[indices[:train_length]], total_points_array[indices[train_length:]]  
+        # Normalize points this season
+        points_this_season_array = torch.tensor(np.array(points_this_season_array).astype(float).reshape((-1, 1))).double()
+        points_this_season_means = torch.mean(points_this_season_array)
+        points_this_season_stds = torch.std(points_this_season_array)
+        points_this_season_array = (points_this_season_array - points_this_season_means) / points_this_season_stds
 
         
 
-        train_loader = DataLoader(TensorDataset(train_player_features_array, train_opponent_features_array, train_total_points_array), batch_size=batch_size)
-        test_loader = DataLoader(TensorDataset(test_player_features_array, test_opponent_features_array, test_total_points_array), batch_size=batch_size)
-        return train_loader, test_loader, (player_features_means, player_features_stds, opponent_features_means, opponent_features_stds, total_points_means, total_points_stds)
+        train_player_features_array, test_player_features_array = player_features_array[indices[:train_length]], player_features_array[indices[train_length:]]
+        train_opponent_features_array, test_opponent_features_array = opponent_features_array[indices[:train_length]], opponent_features_array[indices[train_length:]]
+        train_total_points_array, test_total_points_array = total_points_array[indices[:train_length]], total_points_array[indices[train_length:]]
+          
+        
+        train_points_this_season_array, test_points_this_season_array = points_this_season_array[indices[:train_length]], points_this_season_array[indices[train_length:]]
+
+        
+        train_loader = DataLoader(TensorDataset(train_player_features_array, train_opponent_features_array, train_points_this_season_array, train_total_points_array), batch_size=batch_size)
+        test_loader = DataLoader(TensorDataset(test_player_features_array, test_opponent_features_array, test_points_this_season_array, test_total_points_array), batch_size=batch_size)
+        return train_loader, test_loader, (player_features_means, player_features_stds, opponent_features_means, opponent_features_stds, points_this_season_means , points_this_season_stds, total_points_means, total_points_stds)
 
 
 

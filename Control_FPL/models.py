@@ -68,7 +68,7 @@ class PreviousScoreModel(Model):
         player_features, opponent_features = [], []
         predictions = []
         total_points = []
-        for (player_feature, opponent_feature, total_point) in test_loader:
+        for (player_feature, opponent_feature, player_total_point, total_point) in test_loader:
             prediction = player_feature[:,0,-1]
             predictions.append(prediction)
             opponent_features.append(opponent_feature)
@@ -81,7 +81,7 @@ class PlayerAvgScoreModel(Model):
         player_features, opponent_features = [], []
         predictions = []
         total_points = []
-        for (player_feature, opponent_feature, total_point) in test_loader:
+        for (player_feature, opponent_feature, player_total_point, total_point) in test_loader:
             prediction = player_feature.mean(dim=2).mean(dim=1)# * opponent_feature.detach().numpy().mean(axis=2).mean(axis=1)
             predictions.append(prediction)
             opponent_features.append(opponent_feature)
@@ -94,7 +94,7 @@ class AvgScoreModel(Model):
         player_features, opponent_features = [], []
         predictions = []
         total_points = []
-        for (player_feature, opponent_feature, total_point) in test_loader:
+        for (player_feature, opponent_feature, player_total_point, total_point) in test_loader:
             prediction = player_feature.mean(dim=2).mean(dim=1) * opponent_feature.detach().numpy().mean(axis=2).mean(axis=1)
             predictions.append(prediction)
             opponent_features.append(opponent_feature)
@@ -120,7 +120,7 @@ class LinearModel(Model):
     def fit(self, train_loader):
         self.model.train()
         for _ in range(10):
-            for (player_feature, opponent_feature, total_point) in train_loader:
+            for (player_feature, opponent_feature, player_total_point, total_point) in train_loader:
                 self.optimizer.zero_grad()
                 if self.use_opponent_features:
                     player_feature = player_feature.reshape((-1, self.window * len(self.player_feature_names)))
@@ -140,7 +140,7 @@ class LinearModel(Model):
         player_features, opponent_features = [], []
         predictions = []
         total_points = []
-        for (player_feature, opponent_feature, total_point) in test_loader:
+        for (player_feature, opponent_feature, player_total_point, total_point) in test_loader:
             if self.use_opponent_features:
                 player_feature = player_feature.reshape((-1, self.window * len(self.player_feature_names)))
                 opponent_feature = opponent_feature.reshape((-1, self.window * len(self.opponent_feature_names)))
@@ -164,7 +164,7 @@ class HierarchialLinearModel(Model):
         self.opponent_feature_names = opponent_feature_names
         self.features = self.player_feature_names + self.opponent_feature_names
         self.player_model = nn.Sequential(*[nn.Linear(len(self.player_feature_names) * window, 1)]).double()
-        self.model = nn.Sequential(*[nn.Linear(len(self.opponent_feature_names) + 1, 1)]).double()
+        self.model = nn.Sequential(*[nn.Linear(len(self.opponent_feature_names) + 2, 1)]).double()
         self.window = window
         self.optimizer = optim.Adam(list(self.model.parameters()) + list(self.player_model.parameters()), 1e-3)
         self.model_path = model_path
@@ -172,12 +172,12 @@ class HierarchialLinearModel(Model):
     def fit(self, train_loader):
         self.model.train()
         for _ in range(10):
-            for (player_feature, opponent_feature, total_point) in train_loader:
+            for (player_feature, opponent_feature, player_total_point, total_point) in train_loader:
                 self.optimizer.zero_grad()
                 player_feature = player_feature.reshape((-1, self.window * len(self.player_feature_names)))
                 player_score = self.player_model.forward(player_feature) #(N, 1)
                 opponent_feature = torch.mean(opponent_feature, dim=-1) #(N, D)
-                input_feature = torch.cat((player_score, opponent_feature), dim=-1) #(N, D + 1)             
+                input_feature = torch.cat((player_score, opponent_feature, player_total_point), dim=-1) #(N, D + 1)             
                 prediction = self.model.forward(input_feature)
                 residual = prediction - total_point
                 loss = (residual * residual).sum()
@@ -190,11 +190,11 @@ class HierarchialLinearModel(Model):
         player_features, opponent_features = [], []
         predictions = []
         total_points = []
-        for (player_feature, opponent_feature, total_point) in test_loader:
+        for (player_feature, opponent_feature, player_total_point, total_point) in test_loader:
             player_feature = player_feature.reshape((-1, self.window * len(self.player_feature_names)))
             player_score = self.player_model.forward(player_feature) #(N, 1)
             opponent_feature = torch.mean(opponent_feature, dim=-1) #(N, D)
-            input_feature = torch.cat((player_score, opponent_feature), dim=-1) #(N, D + 1)    
+            input_feature = torch.cat((player_score, opponent_feature, player_total_point), dim=-1) #(N, D + 1)    
             prediction = self.model.forward(input_feature)
             predictions.append(prediction)
             opponent_features.append(opponent_feature)
@@ -220,11 +220,11 @@ class HierarchialLinearModel(Model):
 
 
 class NonLinearModel(Model):
-    def __init__(self, player_feature_names, opponent_feature_names, window=4, model_path=None,):
+    def __init__(self, player_feature_names, opponent_feature_names, window=4, model_path=None, use_opponent_features=True):
         self.player_feature_names = player_feature_names
         self.opponent_feature_names = opponent_feature_names
         self.features = self.player_feature_names + self.opponent_feature_names
-        self.model = nn.Sequential(*[nn.Linear(len(self.features) * window, 30),
+        self.model = nn.Sequential(*[nn.Linear(len(self.features) * window + 1, 30),
                                      nn.ReLU(), 
                                      nn.Linear(30, 1)]).double()
         self.window = window
@@ -235,11 +235,11 @@ class NonLinearModel(Model):
     def fit(self, train_loader):
         self.model.train()
         for _ in range(30):
-            for (player_feature, opponent_feature, total_point) in train_loader:
+            for (player_feature, opponent_feature, player_total_point, total_point) in train_loader:
                 self.optimizer.zero_grad()
                 player_feature = player_feature.reshape((-1, self.window * len(self.player_feature_names)))
                 opponent_feature = opponent_feature.reshape((-1, self.window * len(self.opponent_feature_names)))
-                input_feature = torch.cat((player_feature, opponent_feature), dim=-1)             
+                input_feature = torch.cat((player_feature, opponent_feature, player_total_point), dim=-1)             
                 prediction = self.model.forward(input_feature)
                 residual = prediction - total_point
                 loss = (residual * residual).sum()
@@ -252,10 +252,10 @@ class NonLinearModel(Model):
         player_features, opponent_features = [], []
         predictions = []
         total_points = []
-        for (player_feature, opponent_feature, total_point) in test_loader:
+        for (player_feature, opponent_feature, player_total_point, total_point) in test_loader:
             player_feature = player_feature.reshape((-1, self.window * len(self.player_feature_names)))
             opponent_feature = opponent_feature.reshape((-1, self.window * len(self.opponent_feature_names)))
-            input_feature = torch.cat((player_feature, opponent_feature), dim=-1)             
+            input_feature = torch.cat((player_feature, opponent_feature, player_total_point), dim=-1)             
             prediction = self.model.forward(input_feature)
             prediction = self.model.forward(input_feature)
             predictions.append(prediction)

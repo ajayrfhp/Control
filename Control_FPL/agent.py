@@ -15,14 +15,14 @@ from torch.utils.data import TensorDataset, DataLoader
 from player import Player
 from team import Team
 from data_processor import get_fpl, get_current_squad, get_teams, get_players, get_training_datasets
-from models import LinearModel
+from models import HierarchialLinearModel
 
 class Agent:
     def __init__(self, player_feature_names, opponent_feature_names, model_path):
         self.player_feature_names = player_feature_names
         self.opponent_feature_names = opponent_feature_names
-        self.model = LinearModel(player_feature_names, opponent_feature_names, 
-                            model_path=model_path, use_opponent_features=True)
+        self.model = HierarchialLinearModel(player_feature_names, opponent_feature_names, 
+                            model_path=model_path)
         self.players = None
     
     async def get_data(self):
