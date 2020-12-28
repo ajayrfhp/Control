@@ -133,7 +133,7 @@ def get_training_datasets(players, teams, window=4, batch_size=50, visualize=Fal
         opponents = player.opponents.reshape((-1, 1)) # (1 * L matrix)
         
         # Break (D * L) matrix into (L - W + 1) D * W matrices
-        choice = np.random.choice([0])
+        choice = np.random.choice([0, 1, 2])
         player_feature_chunks = [player_features[:,i:i+window] for i in range(player_features.shape[1] - window - choice)]
         player_feature_chunks = np.array(player_feature_chunks)
         opponent_chunks = [(i+window + choice, opponents[i+window + choice]) for i in range(player_features.shape[1] - window - choice)]
@@ -205,7 +205,7 @@ def get_training_datasets(players, teams, window=4, batch_size=50, visualize=Fal
         opponent_features_array = (opponent_features_array - opponent_features_means) / (opponent_features_stds)
         opponent_features_array = opponent_features_array.permute(0, 2, 1) #(N, D, T)
         
-        # Normalize total poitns array
+        # Normalize total pointss array
         total_points_array = torch.tensor(np.array(total_points_array).astype(float).reshape((-1, 1))).double()
         total_points_means = torch.mean(total_points_array)
         total_points_stds = torch.std(total_points_array)

@@ -63,7 +63,7 @@ class Player:
         player_score = model.player_model.forward(player_feature) #(N, 1)
         opponent_feature = torch.tensor(latest_opponent_features_array).double()
         opponent_feature = torch.mean(opponent_feature, dim=-1) #(N, D)
-        input_feature = torch.cat((player_score, opponent_feature, player_total_points), dim=-1) #(N, D + 1)
+        input_feature = torch.cat((player_score, opponent_feature, player_total_points), dim=-1) #(N, D + 2)
         unnormalized_prediction = model.model.forward(input_feature).detach()[0][0]
         self.predicted_performance = ((total_points_stds * unnormalized_prediction) + total_points_means).item()
 

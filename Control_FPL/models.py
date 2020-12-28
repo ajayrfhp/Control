@@ -194,7 +194,7 @@ class HierarchialLinearModel(Model):
             player_feature = player_feature.reshape((-1, self.window * len(self.player_feature_names)))
             player_score = self.player_model.forward(player_feature) #(N, 1)
             opponent_feature = torch.mean(opponent_feature, dim=-1) #(N, D)
-            input_feature = torch.cat((player_score, opponent_feature, player_total_point), dim=-1) #(N, D + 1)    
+            input_feature = torch.cat((player_score, opponent_feature, player_total_point), dim=-1) #(N, D + 2)    
             prediction = self.model.forward(input_feature)
             predictions.append(prediction)
             opponent_features.append(opponent_feature)
