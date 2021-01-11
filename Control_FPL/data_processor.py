@@ -226,9 +226,9 @@ def get_training_datasets(players, teams, window=4, batch_size=50, visualize=Fal
         for i, opponent in opponent_chunks:
             for team in teams:
                 if team.name == opponent:
-                    opponent_feature = team.team_features[:,i-window+1:i]
-                    if opponent_feature.shape[1] != window - 1:
-                        opponent_feature = np.zeros((opponent_feature.shape[0], window-1))
+                    opponent_feature = team.team_features[:,i-window:i]
+                    if opponent_feature.shape[1] != window:
+                        opponent_feature = np.zeros((opponent_feature.shape[0], window))
                     opponent_feature_chunks.append(opponent_feature)
         
         opponent_feature_chunks = np.array(opponent_feature_chunks)
@@ -254,16 +254,12 @@ async def get_current_squad(player_feature_names, team_feature_names, num_player
         await fpl.login(email=email, password=password)
         user = await fpl.get_user(user_id)
         bank = (await user.get_transfers_status())["bank"] 
-        squad = await user.get_team()
-        
-    
+        squad = await user.get_team()    
         for i, player_element in enumerate(squad):
             for player in players:
                 if player.id == player_element["element"]:
                     player.in_current_squad = True
                     player.bank = bank
-
-
 
         current_squad_players = [player for player in players if player.in_current_squad]
         non_squad_players = [player for player in players if not player.in_current_squad]
