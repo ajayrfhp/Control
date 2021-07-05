@@ -27,7 +27,7 @@ def get_normalized_team_names():
     team_names = pd.read_csv("standard_teams.csv")
     return team_names
 
-def get_player_features(player_feature_names):
+def get_player_features(player_feature_names, max_player_points=12):
     """Function gets historical features for all players
 
     Args:
@@ -53,7 +53,7 @@ def get_player_features(player_feature_names):
     game_weeks["opponent"] = game_weeks["normalized_team_name"]
     all_player_features = game_weeks[["name", "opponent"] + player_feature_names]
     all_player_features.fillna(0, inplace=True)
-    all_player_features["total_points"] = all_player_features["total_points"].clip(0, 12)
+    all_player_features["total_points"] = all_player_features["total_points"].clip(0, max_player_points)
     return all_player_features
 
 
@@ -79,7 +79,7 @@ async def get_players(player_feature_names, team_feature_names, window, visualiz
         teams = get_teams(team_feature_names, window)
         players = []
         all_player_features =  get_player_features(player_feature_names)
-        for i in range(1, num_players):
+        for i in range(1, num_players+1):
             player_data = await fpl.get_player(i)
             name = player_data.first_name + " " + player_data.second_name
             integer_position = player_data.element_type
@@ -102,7 +102,7 @@ async def get_players(player_feature_names, team_feature_names, window, visualiz
 
             player_features = all_player_features[all_player_features["name"] == name].transpose().values[1:]
             player = Player(id=i, name=name, integer_position=integer_position, team=team.name, 
-                            latest_price=latest_price, window=4, player_feature_names=player_feature_names, teams=teams,
+                            latest_price=latest_price, window=window, player_feature_names=player_feature_names, teams=teams,
                             player_features=player_features[1:], latest_opponent=latest_opponent,opponents=player_features[:1][0],
                             chance_of_playing_this_round=chance_of_playing_this_round)
             
@@ -119,7 +119,7 @@ def get_team_features(team_name, team_feature_names=["npxGA"]):
         team_feature_names (list, optional): list of team feature names. Defaults to ["npxGA"].
 
     Returns:
-        features (pd.DataFrame): Numpy array of shape (D, L)
+        features (pd.DataFrame): Pandas Dataframe with values of shape (D, L)
     """
     team_file_name = team_name.replace(" ", "_")
     team_history, team_current = pd.DataFrame(), pd.DataFrame()
