@@ -2,9 +2,11 @@ import numpy as np
 import seaborn as sns
 from matplotlib import pyplot as plt
 import torch
+from model_utils import if_has_gpu_use_gpu
+
 class Player:
     def __init__(self, id, name, integer_position, team, latest_price, 
-                num_features=0, player_feature_names=[], window=0, 
+                player_feature_names=[], window=0, 
                 player_features=[], teams=[], latest_opponent=None,
                 opponents=[], chance_of_playing_this_round=100,
                 in_playing_11=False):
@@ -19,7 +21,6 @@ class Player:
         self.position = self.position_map[integer_position]
         self.team = team
         self.latest_price = latest_price
-        self.num_features = num_features
         self.player_feature_names = player_feature_names
         self.window = window
         self.player_features = player_features
@@ -31,6 +32,7 @@ class Player:
         self.predicted_performance = 0
         self.chance_of_playing_this_round = chance_of_playing_this_round
         self.in_playing_11 = in_playing_11
+        self.num_features = len(self.player_feature_names) + self.latest_opponent_feature.shape[0]
 
     def visualize(self):
         plt.title(f"{self.name} {self.predicted_performance} {self.chance_of_playing_this_round}")
@@ -45,26 +47,16 @@ class Player:
         if self.chance_of_playing_this_round == 0:
             self.predicted_performance = 0
             return
-        (player_features_means, player_features_stds, opponent_features_means, opponent_features_stds, points_this_season_means, points_this_season_stds, total_points_means, total_points_stds) = normalizers
+        (means, stds) = normalizers
+        x = np.concatenate((self.latest_features, self.latest_opponent_feature), axis=0)
+        x = torch.tensor(x).reshape((1, self.num_features, self.window)).double()  # (1, D, L)
+        x = x.permute(0, 2, 1) # (N, L, D)
+        if if_has_gpu_use_gpu():
+            x = x.cuda()
+        normalized_x = (x - means) / (stds) # (N, L, D)
+        normalized_x = normalized_x.permute(0, 2, 1) # (N, D, L)
 
-        latest_player_features_array = torch.tensor(self.latest_features).unsqueeze(dim=0).permute(0, 2, 1)
-        latest_player_features_array = (latest_player_features_array - player_features_means) / (player_features_stds)
-        latest_player_features_array = latest_player_features_array.permute(0, 2, 1)
+        self.predicted_performance = model.forward(normalized_x).detach()[0] * means[0] + stds[0] # renormalized scalar
 
-        latest_opponent_features_array = torch.tensor(self.latest_opponent_feature).unsqueeze(dim=0).permute(0, 2, 1)
-        latest_opponent_features_array = (latest_opponent_features_array - opponent_features_means) / (opponent_features_stds)
-        latest_opponent_features_array = latest_opponent_features_array.permute(0, 2, 1)
-
-        player_total_points = torch.tensor(self.player_features[0].sum()).reshape((-1, 1))
-        player_total_points = (player_total_points - points_this_season_means) / (points_this_season_stds)
-
-
-        player_feature = torch.tensor(latest_player_features_array.reshape((-1, self.window * len(self.player_feature_names)))).double()
-        player_score = model.player_model.forward(player_feature) #(N, 1)
-        opponent_feature = torch.tensor(latest_opponent_features_array).double()
-        opponent_feature = torch.mean(opponent_feature, dim=-1) #(N, D)
-        input_feature = torch.cat((player_score, opponent_feature, player_total_points), dim=-1) #(N, D + 2)
-        unnormalized_prediction = model.model.forward(input_feature).detach()[0][0]
-        self.predicted_performance = ((total_points_stds * unnormalized_prediction) + total_points_means).item()
 
 

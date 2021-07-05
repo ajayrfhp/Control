@@ -1,3 +1,5 @@
+import wget
+import os
 import pandas as pd
 import torch
 import numpy as np
@@ -6,8 +8,6 @@ from random import shuffle
 np.random.seed(17)
 random.seed(17)
 torch.manual_seed(17)
-import wget
-import os
 import aiohttp
 import asyncio
 from fpl import FPL
@@ -15,25 +15,38 @@ from torch.utils.data import TensorDataset, DataLoader
 from player import Player
 from team import Team
 from data_processor import get_fpl, get_current_squad, get_teams, get_players, get_training_datasets
-from models import HierarchialLinearModel
+from models import LinearModel
+from model_utils import fit, eval, load, save, if_has_gpu_use_gpu
 
 class Agent:
-    def __init__(self, player_feature_names, opponent_feature_names, model_path):
+    def __init__(self, player_feature_names, opponent_feature_names, model_path='./trained_models/linear_model.pt', use_opponent_features=True, window=4):
         self.player_feature_names = player_feature_names
         self.opponent_feature_names = opponent_feature_names
-        self.model = HierarchialLinearModel(player_feature_names, opponent_feature_names, 
-                            model_path=model_path)
+        self.model = LinearModel(num_features=len(player_feature_names) + len(opponent_feature_names)).double()
+        if if_has_gpu_use_gpu():
+            self.model = self.model.cuda()
         self.players = None
+        self.train_loader, self.test_loader, self.normalizers = None, None, None
+        self.model_path = model_path
+        self.window = window
     
     async def get_data(self):
-        players = await get_players(self.player_feature_names, self.opponent_feature_names, visualize=False, num_players=580)
+        players = await get_players(self.player_feature_names, self.opponent_feature_names, window = self.window, visualize=False, num_players=580)
         self.players = players
-        teams = get_teams(self.opponent_feature_names, visualize=False)
+        teams = get_teams(self.opponent_feature_names, window=self.window, visualize=False)
         self.train_loader, self.test_loader, self.normalizers = get_training_datasets(players, teams)
 
     def update_model(self):
-        self.model.fit(self.train_loader)
-        print(self.model.eval(self.test_loader))
+        fit(self.model, self.train_loader, fixed_window=True)
+        save(self.model, self.model_path)
+        print(eval(self.model, self.test_loader))
+
+    async def get_new_squad(self, player_feature_names, team_feature_names):
+        current_squad, non_squad = await get_current_squad(player_feature_names, team_feature_names, window=self.window)
+        for player in current_squad + non_squad:
+            player.predict_next_performance(self.model, self.normalizers)
+        current_squad, non_squad = self.make_optimal_trade(current_squad, non_squad)
+        return current_squad, non_squad
 
     def make_optimal_trade(self, current_squad, non_squad):
         '''
@@ -179,15 +192,7 @@ class Agent:
         for player in best_11:
             print(player.name)
             player.visualize()
-
-
-    async def get_new_squad(self, player_feature_names, team_feature_names):
-        self.model.load()
-        current_squad, non_squad = await get_current_squad(player_feature_names, team_feature_names)
-        for player in current_squad + non_squad:
-            player.predict_next_performance(self.model, self.normalizers)
-        current_squad, non_squad = self.make_optimal_trade(current_squad, non_squad)
-        return current_squad, non_squad
+    
 
     def show_top_performers(self, players, k=10):
         goalkeepers, defenders, midfielders, forwards = [], [], [], []

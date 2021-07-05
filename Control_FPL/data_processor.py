@@ -15,6 +15,7 @@ from torch.utils.data import TensorDataset, DataLoader
 from player import Player
 from team import Team
 from key import *
+from model_utils import if_has_gpu_use_gpu
 
 
 def get_normalized_team_names():
@@ -56,7 +57,7 @@ def get_all_player_features(player_feature_names):
     return all_player_features
 
 
-async def get_players(player_feature_names, team_feature_names, visualize=False, num_players=10):
+async def get_players(player_feature_names, team_feature_names, window, visualize=False, num_players=10):
     """Function builds up list of players.
        Retrieve latest player information, read in historical statistics of players and build up 
        player object for each player.
@@ -64,6 +65,7 @@ async def get_players(player_feature_names, team_feature_names, visualize=False,
     Args:
         player_feature_names (list): list of player feature names
         team_feature_names (list): list of team feature names
+        window (int) : window size to use for contextual prediction
         visualize (bool, optional): visualize features. Defaults to False.
         num_players (int, optional): number of players to retrieve. Defaults to 10.
 
@@ -74,7 +76,7 @@ async def get_players(player_feature_names, team_feature_names, visualize=False,
     manual_injuries = ["Diego Jota"]
     async with aiohttp.ClientSession() as session:
         fpl = FPL(session) 
-        teams = get_teams(team_feature_names)
+        teams = get_teams(team_feature_names, window)
         players = []
         all_player_features =  get_all_player_features(player_feature_names)
         for i in range(1, num_players):
@@ -137,13 +139,13 @@ def get_team_features(team_name, team_feature_names=["npxGA"]):
     return features
 
 
-def get_teams(team_feature_names, visualize=False, window=4):
+def get_teams(team_feature_names, window, visualize=False):
     """Function gets feature matrix for all teams and builds up teams list
 
     Args:
+        window (int, optional): input window size.
         team_feature_names (list): list of team feature names
         visualize (bool, optional): visualize features. Defaults to False.
-        window (int, optional): input window size. Defaults to 4.
 
     Returns:
         list: list of teams
@@ -218,25 +220,28 @@ def get_training_datasets(players, teams, window_size=7, batch_size=50):
     indices = np.random.permutation(range(len(X)))
     train_length = int(0.8 * len(X))
     X = torch.tensor(X).double()
+    if if_has_gpu_use_gpu():
+        X = X.cuda()
     X, means, stds = normalize(X)
     X_train, X_test = X[indices[:train_length]], X[indices[train_length:]] 
     train_loader = DataLoader(TensorDataset(X_train,), batch_size=batch_size)
     test_loader = DataLoader(TensorDataset(X_test,), batch_size=batch_size)
     return train_loader, test_loader, (means, stds)
 
-async def get_current_squad(player_feature_names, team_feature_names, num_players=580):
+async def get_current_squad(player_feature_names, team_feature_names, window, num_players=580):
     """function gets player lists for players in squad and out of squad
 
     Args:
         player_feature_names (list): names of player related features
         team_feature_names (list): names of team related features
+        window (int) : window size
         num_players (int, optional): max number of players to build dataset. Defaults to 580.
 
     Returns:
         current_squad, non_squad(list, list): players in squad, players out of squad
     """
     current_squad_players, non_squad_players = [], []
-    players = await get_players(player_feature_names, team_feature_names, num_players=num_players)
+    players = await get_players(player_feature_names, team_feature_names, window, num_players=num_players)
     async with aiohttp.ClientSession() as session:
         fpl = FPL(session)
         await fpl.login(email=email, password=password)
