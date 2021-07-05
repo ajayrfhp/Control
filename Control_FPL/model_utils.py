@@ -2,6 +2,14 @@ import numpy as np
 import torch
 import torch.optim as optim
 
+def if_has_gpu_use_gpu():
+    if torch.cuda.device_count() >= 1:
+        torch.set_default_tensor_type(torch.cuda.DoubleTensor)
+        return True
+    else:
+        torch.set_default_tensor_type(torch.DoubleTensor)
+        return False
+
 def fit(model, train_loader, fixed_window=False, input_window=4, epochs=100, use_opponent_feature=False, len_opponent_features=2):
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
     model.train()

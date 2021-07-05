@@ -27,7 +27,7 @@ def get_normalized_team_names():
     team_names = pd.read_csv("standard_teams.csv")
     return team_names
 
-def get_all_player_features(player_feature_names):
+def get_player_features(player_feature_names):
     """Function gets historical features for all players
 
     Args:
@@ -78,7 +78,7 @@ async def get_players(player_feature_names, team_feature_names, window, visualiz
         fpl = FPL(session) 
         teams = get_teams(team_feature_names, window)
         players = []
-        all_player_features =  get_all_player_features(player_feature_names)
+        all_player_features =  get_player_features(player_feature_names)
         for i in range(1, num_players):
             player_data = await fpl.get_player(i)
             name = player_data.first_name + " " + player_data.second_name
@@ -122,7 +122,7 @@ def get_team_features(team_name, team_feature_names=["npxGA"]):
         features (pd.DataFrame): Numpy array of shape (D, L)
     """
     team_file_name = team_name.replace(" ", "_")
-    team_history, team_current = None, None
+    team_history, team_current = pd.DataFrame(), pd.DataFrame()
 
     if os.path.exists(f"./data/2020-21/understat/understat_{team_file_name}.csv"):
         team_current = pd.read_csv(f"./data/2020-21/understat/understat_{team_file_name}.csv")
@@ -134,8 +134,11 @@ def get_team_features(team_name, team_feature_names=["npxGA"]):
         team_history = team_history.reset_index()
         team_history["index"] += 1
 
+    if not team_current.shape[0] and not team_history.shape[0]:
+        return pd.DataFrame(0, index=team_feature_names, columns=range(30))
+
     team_current = pd.concat((team_history, team_current))
-    features = team_current[team_feature_names].transpose().values
+    features = team_current[team_feature_names].transpose()
     return features
 
 
@@ -153,7 +156,7 @@ def get_teams(team_feature_names, window, visualize=False):
     team_names = get_normalized_team_names()
     teams = []
     for team_name in team_names["normalized_team_name"].values:
-        team_features = get_team_features(team_name, team_feature_names)
+        team_features = get_team_features(team_name, team_feature_names).values
         if team_features.shape[0]:
             team = Team(name=team_name, team_feature_names=team_feature_names, team_features=team_features, window=window)
             if visualize:
