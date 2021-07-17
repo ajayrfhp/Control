@@ -57,7 +57,7 @@ def get_player_features(player_feature_names, max_player_points=12):
     return all_player_features
 
 
-async def get_players(player_feature_names, team_feature_names, window, visualize=False, num_players=10):
+async def get_players(player_feature_names, team_feature_names, window, visualize=False, num_players=600):
     """Function builds up list of players.
        Retrieve latest player information, read in historical statistics of players and build up 
        player object for each player.
@@ -80,35 +80,38 @@ async def get_players(player_feature_names, team_feature_names, window, visualiz
         players = []
         all_player_features =  get_player_features(player_feature_names)
         for i in range(1, num_players+1):
-            player_data = await fpl.get_player(i)
-            name = player_data.first_name + " " + player_data.second_name
-            integer_position = player_data.element_type
-            latest_price = player_data.now_cost
-            team = await fpl.get_team(player_data.team)
-            fixtures = await team.get_fixtures(return_json=True)
-            latest_opponent = fixtures[0]["team_h"]
-            if fixtures[0]["team_h"] == player_data.team:
-                latest_opponent = fixtures[0]["team_a"]
-            latest_opponent = await fpl.get_team(latest_opponent)
-            latest_opponent = normalized_team_names[normalized_team_names["name_2019"] == latest_opponent.name]["normalized_team_name"].values[0]
-            latest_opponent = [team for team in teams if team.name == latest_opponent][0]
-            
-            
-            chance_of_playing_this_round = 100
-            if player_data.chance_of_playing_this_round is not None:
-                chance_of_playing_this_round = player_data.chance_of_playing_this_round
-            if name in manual_injuries:
-                chance_of_playing_this_round = 0 
+            try:
+                player_data = await fpl.get_player(i)
+                name = player_data.first_name + " " + player_data.second_name
+                integer_position = player_data.element_type
+                latest_price = player_data.now_cost
+                team = await fpl.get_team(player_data.team)
+                fixtures = await team.get_fixtures(return_json=True)
+                latest_opponent = fixtures[0]["team_h"]
+                if fixtures[0]["team_h"] == player_data.team:
+                    latest_opponent = fixtures[0]["team_a"]
+                latest_opponent = await fpl.get_team(latest_opponent)
+                latest_opponent = normalized_team_names[normalized_team_names["name_2019"] == latest_opponent.name]["normalized_team_name"].values[0]
+                latest_opponent = [team for team in teams if team.name == latest_opponent][0]
+                
+                
+                chance_of_playing_this_round = 100
+                if player_data.chance_of_playing_this_round is not None:
+                    chance_of_playing_this_round = player_data.chance_of_playing_this_round
+                if name in manual_injuries:
+                    chance_of_playing_this_round = 0 
 
-            player_features = all_player_features[all_player_features["name"] == name].transpose().values[1:]
-            player = Player(id=i, name=name, integer_position=integer_position, team=team.name, 
-                            latest_price=latest_price, window=window, player_feature_names=player_feature_names, teams=teams,
-                            player_features=player_features[1:], latest_opponent=latest_opponent,opponents=player_features[:1][0],
-                            chance_of_playing_this_round=chance_of_playing_this_round)
-            
-            if visualize:
-                player.visualize()
-            players.append(player)
+                player_features = all_player_features[all_player_features["name"] == name].transpose().values[1:]
+                player = Player(id=i, name=name, integer_position=integer_position, team=team.name, 
+                                latest_price=latest_price, window=window, player_feature_names=player_feature_names, teams=teams,
+                                player_features=player_features[1:], latest_opponent=latest_opponent,opponents=player_features[:1][0],
+                                chance_of_playing_this_round=chance_of_playing_this_round)
+                
+                if visualize:
+                    player.visualize()
+                players.append(player)
+            except:
+                continue
         return players
 
 def get_team_features(team_name, team_feature_names=["npxGA"]):
@@ -231,32 +234,45 @@ def get_training_datasets(players, teams, window_size=7, batch_size=50):
     test_loader = DataLoader(TensorDataset(X_test,), batch_size=batch_size)
     return train_loader, test_loader, (means, stds)
 
-async def get_current_squad(player_feature_names, team_feature_names, window, num_players=580):
+async def get_current_squad(player_feature_names, team_feature_names, window):
     """function gets player lists for players in squad and out of squad
 
     Args:
         player_feature_names (list): names of player related features
         team_feature_names (list): names of team related features
         window (int) : window size
-        num_players (int, optional): max number of players to build dataset. Defaults to 580.
 
     Returns:
         current_squad, non_squad(list, list): players in squad, players out of squad
     """
     current_squad_players, non_squad_players = [], []
-    players = await get_players(player_feature_names, team_feature_names, window, num_players=num_players)
+    players = await get_players(player_feature_names, team_feature_names, window)
     async with aiohttp.ClientSession() as session:
         fpl = FPL(session)
         await fpl.login(email=email, password=password)
         user = await fpl.get_user(user_id)
         bank = (await user.get_transfers_status())["bank"] 
         squad = await user.get_team()    
+
+
+        cheapest_gk_price, cheapest_defender_price = 10000, 10000 
+        cheapest_gk, cheapest_defender = None, None
         for i, player_element in enumerate(squad):
             for player in players:
                 if player.id == player_element["element"]:
                     player.in_current_squad = True
                     player.bank = bank
+                    if player.position == "Goalkeeper" and player.bank < cheapest_gk_price:
+                        cheapest_gk = player
+                    if player.position == "Defender" and player.bank < cheapest_defender_price:
+                        cheapest_defender = player
                     current_squad_players.append(player)
+        
+        # Modeller bias, do not swap the cheapest goal keeper or the cheapest defender
+        for player in current_squad_players:
+            if player.id == cheapest_defender.id or player.id == cheapest_gk.id:
+                player.is_useless = True
+
 
         for player in players:
             if not player.in_current_squad:

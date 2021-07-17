@@ -80,3 +80,18 @@
   - Agent selection should optimize for best 11 and not best 15.
   - Bayesian linear model
     - Predict player scores along with uncertainity 
+
+# 10 Jul 17:57
+  - Code refactoring
+    - Add wildcard capability in a standalone file.
+  - Agent selection should optimize for best 11 and not best 15
+  - Bayesian linear model 
+    - Predict player scores with uncertainity
+
+# 17 July 11:24
+  - Code refactoring
+    - Test optimal trade function
+    - Test performance prediction function
+    - Add wildcard capability in a standalone file. Wildcard should choose cheapest gk and defender first 
+  - Bayesian linear model 
+    - Predict player scores with uncertainity

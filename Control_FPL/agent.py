@@ -31,7 +31,7 @@ class Agent:
         self.window = window
     
     async def get_data(self):
-        players = await get_players(self.player_feature_names, self.opponent_feature_names, window = self.window, visualize=False, num_players=580)
+        players = await get_players(self.player_feature_names, self.opponent_feature_names, window = self.window, visualize=False, num_players=600)
         self.players = players
         teams = get_teams(self.opponent_feature_names, window=self.window, visualize=False)
         self.train_loader, self.test_loader, self.normalizers = get_training_datasets(players, teams)
@@ -53,19 +53,22 @@ class Agent:
             For each player in squad, 
             find best performing player that can be bought under budget and estimate gain from doing trade. 
             Among all player trades that can be done, identify trade with highest gain. 
+
+            Function considers trade for only 13 players. 
         '''
         def get_optimal_single_trade(current_squad, non_squad,  traded = []):
             optimal_trade_gain, optimal_trade = 0, None
             for player_out in current_squad:
-                for player_in in non_squad:
-                    if len(traded) >= 1:
-                        if player_out == traded[0][0] or player_in == traded[0][1]:
-                            continue
-                    if player_in.position == player_out.position and player_in.latest_price  <= player_out.latest_price + player_out.bank:
-                        trade_gain = player_in.predicted_performance - player_out.predicted_performance
-                        if trade_gain > optimal_trade_gain:
-                            optimal_trade_gain = trade_gain
-                            optimal_trade = (player_out, player_in)
+                if not player_out.is_useless:
+                    for player_in in non_squad:
+                        if len(traded) >= 1:
+                            if player_out == traded[0][0] or player_in == traded[0][1]:
+                                continue
+                        if player_in.position == player_out.position and player_in.latest_price  <= player_out.latest_price + player_out.bank:
+                            trade_gain = player_in.predicted_performance - player_out.predicted_performance
+                            if trade_gain > optimal_trade_gain:
+                                optimal_trade_gain = trade_gain
+                                optimal_trade = (player_out, player_in)
             return optimal_trade, optimal_trade_gain
 
         def get_optimal_sequential_double_trade(current_squad, non_squad, num_trades=2):
@@ -92,23 +95,24 @@ class Agent:
             optimal_trades_gain = 0
             for player_out1 in current_squad:
                 for player_out2 in current_squad:
-                    for player_in1 in non_squad:
-                        for player_in2 in non_squad:
-                            trades_gain = 0
-                            different_players = player_out1.name != player_out2.name and player_in1.name != player_in2.name 
-                            player_in_positions = set((player_in1.position, player_in2.position))
-                            player_out_positions = set((player_out1.position, player_out2.position))
-                            same_positions = player_in_positions == player_out_positions
-                            selling_price = player_out1.latest_price + player_out2.latest_price 
-                            buying_price = player_in1.latest_price + player_in2.latest_price
-                            within_budget = selling_price + player_out2.bank >= buying_price
-                            if different_players and same_positions and within_budget:
-                                trades_gain += (player_in1.predicted_performance + player_in2.predicted_performance) 
-                                trades_gain -= (player_out1.predicted_performance + player_out2.predicted_performance)
-                                if trades_gain > optimal_trades_gain:
-                                    optimal_trades_gain = trades_gain
-                                    optimal_trades = [(player_out1, player_in1), 
-                                                      (player_out2, player_in2)]
+                    if not player_out1.useless and not player_out2.useless:
+                        for player_in1 in non_squad:
+                            for player_in2 in non_squad:
+                                trades_gain = 0
+                                different_players = player_out1.name != player_out2.name and player_in1.name != player_in2.name 
+                                player_in_positions = set((player_in1.position, player_in2.position))
+                                player_out_positions = set((player_out1.position, player_out2.position))
+                                same_positions = player_in_positions == player_out_positions
+                                selling_price = player_out1.latest_price + player_out2.latest_price 
+                                buying_price = player_in1.latest_price + player_in2.latest_price
+                                within_budget = selling_price + player_out2.bank >= buying_price
+                                if different_players and same_positions and within_budget:
+                                    trades_gain += (player_in1.predicted_performance + player_in2.predicted_performance) 
+                                    trades_gain -= (player_out1.predicted_performance + player_out2.predicted_performance)
+                                    if trades_gain > optimal_trades_gain:
+                                        optimal_trades_gain = trades_gain
+                                        optimal_trades = [(player_out1, player_in1), 
+                                                        (player_out2, player_in2)]
             trade_info =  { "trades" : optimal_trades,
                             "trades_gain" : optimal_trades_gain}
             return trade_info
@@ -144,8 +148,6 @@ class Agent:
         acceptable_formations = [[1, 3, 4, 3], [1, 3, 5, 2], [1, 4, 3, 3], 
             [1, 4, 4, 2], [1, 5, 3, 2], [1, 5, 4, 1], [1, 5, 2, 3]]
         
-        for name in current_squad:
-            print(name.position)
         goalkeepers, defenders, midfielders, forwards = [], [], [], []
         for player in current_squad:
             if player.position == "Goalkeeper":

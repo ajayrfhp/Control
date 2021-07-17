@@ -33,6 +33,7 @@ class Player:
         self.chance_of_playing_this_round = chance_of_playing_this_round
         self.in_playing_11 = in_playing_11
         self.num_features = len(self.player_feature_names) + self.latest_opponent_feature.shape[0]
+        self.is_useless = False
 
     def visualize(self):
         plt.title(f"{self.name} {self.predicted_performance} {self.chance_of_playing_this_round}")
@@ -44,7 +45,7 @@ class Player:
         plt.show()
 
     def predict_next_performance(self, model, normalizers):
-        if self.chance_of_playing_this_round == 0:
+        if self.chance_of_playing_this_round == 0 or self.is_useless:
             self.predicted_performance = 0
             return
         (means, stds) = normalizers
