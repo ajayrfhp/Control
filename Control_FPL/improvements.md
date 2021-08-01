@@ -90,8 +90,28 @@
 
 # 17 July 11:24
   - Code refactoring
+    - Test model train function
     - Test optimal trade function
     - Test performance prediction function
     - Add wildcard capability in a standalone file. Wildcard should choose cheapest gk and defender first 
+    - Add decent training visualization
   - Bayesian linear model 
     - Predict player scores with uncertainity
+  
+# 28 Jul 17:15
+  - Code refactoring
+    - Test optimal trade function, playing 11 function
+    - Add wildcard capability in a standalone file. Wildcard should choose cheapest gk and defender first 
+    - Add decent training visualization
+  - Log current squad, new squad and top players. 
+  - Bayesian linear model 
+    - Predict player scores with uncertainity
+
+
+# 1 Aug 18:20
+- Code refactoring
+  - Test playing 11 function
+  - Add wildcard capability in a standaline file. Wildcard should choose cheapest gk and defender first 
+  - Add decent training viz 
+- Log changes, current squad, new_squad and top players with agent.ipynb
+  - Generate static agent_GAMEWEEK_ID.html and publish 

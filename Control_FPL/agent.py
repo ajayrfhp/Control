@@ -1,3 +1,5 @@
+from collections import defaultdict
+import pickle
 import wget
 import os
 import pandas as pd
@@ -19,7 +21,7 @@ from models import LinearModel
 from model_utils import fit, eval, load, save, if_has_gpu_use_gpu
 
 class Agent:
-    def __init__(self, player_feature_names, opponent_feature_names, model_path='./trained_models/linear_model.pt', use_opponent_features=True, window=4):
+    def __init__(self, player_feature_names, opponent_feature_names, model_path='./trained_models/linear_model.pt', use_opponent_features=True, window=4, epochs=100):
         self.player_feature_names = player_feature_names
         self.opponent_feature_names = opponent_feature_names
         self.model = LinearModel(num_features=len(player_feature_names) + len(opponent_feature_names)).double()
@@ -29,15 +31,18 @@ class Agent:
         self.train_loader, self.test_loader, self.normalizers = None, None, None
         self.model_path = model_path
         self.window = window
+        self.epochs = epochs
+        os.environ['GAME_WEEK'] = '1_2021'
     
     async def get_data(self):
-        players = await get_players(self.player_feature_names, self.opponent_feature_names, window = self.window, visualize=False, num_players=600)
+        players = await get_players(self.player_feature_names, self.opponent_feature_names, window=self.window, visualize=False, num_players=600)
         self.players = players
         teams = get_teams(self.opponent_feature_names, window=self.window, visualize=False)
         self.train_loader, self.test_loader, self.normalizers = get_training_datasets(players, teams)
 
-    def update_model(self):
-        fit(self.model, self.train_loader, fixed_window=True)
+    async def update_model(self):
+        await self.get_data()
+        fit(self.model, self.train_loader, fixed_window=True, epochs=self.epochs)
         save(self.model, self.model_path)
         print(eval(self.model, self.test_loader))
 
@@ -95,7 +100,7 @@ class Agent:
             optimal_trades_gain = 0
             for player_out1 in current_squad:
                 for player_out2 in current_squad:
-                    if not player_out1.useless and not player_out2.useless:
+                    if not player_out1.is_useless and not player_out2.is_useless:
                         for player_in1 in non_squad:
                             for player_in2 in non_squad:
                                 trades_gain = 0
@@ -116,25 +121,33 @@ class Agent:
             trade_info =  { "trades" : optimal_trades,
                             "trades_gain" : optimal_trades_gain}
             return trade_info
-
-
-        optimal_sequential_double_trade = get_optimal_sequential_double_trade(current_squad, non_squad)
-        optimal_parallel_double_trade = get_optimal_parallel_double_trade(current_squad, non_squad)
-
-        to_hold_for_double = optimal_parallel_double_trade["trades_gain"] > optimal_sequential_double_trade["trades_gain"]
-        for player_out, player_in in optimal_parallel_double_trade["trades"]:
-            print("optimal parallel double trade {} {}", player_out.name, player_in.name)
         
-        for player_out, player_in in optimal_sequential_double_trade["trades"]:
-            print("optimal sequential double trade {} {}", player_out.name, player_in.name)
+        changes = {}
+        try:
+            with open('changes.pickle', 'rb') as fp:
+                changes = pickle.load(fp)
+        except :
+            pass
 
-        optimal_trade = optimal_sequential_double_trade 
-        num_trades = 1
-        if to_hold_for_double:
-            print("Hold for double trade")
-            num_trades = 2
-            optimal_trade = optimal_parallel_double_trade 
-        
+        if os.environ['GAME_WEEK'] in changes.keys():
+            optimal_trade, num_trades = changes[os.environ['GAME_WEEK']], 2
+        else:
+            optimal_single_trade = get_optimal_sequential_double_trade(current_squad, non_squad, num_trades=1)
+            optimal_sequential_double_trade = get_optimal_sequential_double_trade(current_squad, non_squad)
+            optimal_parallel_double_trade = get_optimal_parallel_double_trade(current_squad, non_squad)
+            to_hold_for_double = optimal_parallel_double_trade["trades_gain"] > optimal_sequential_double_trade["trades_gain"]
+            optimal_trade, num_trades = optimal_sequential_double_trade, 1
+            if to_hold_for_double:
+                gw, year = os.environ['GAME_WEEK'].split('_')
+                changes[f'{gw+1}_{year}'] = optimal_parallel_double_trade
+                optimal_trade, num_trades = optimal_parallel_double_trade, 0
+            else:
+                changes[os.environ['GAME_WEEK']] = optimal_single_trade
+                optimal_trade, num_trades = optimal_single_trade, 1
+
+        with open('changes.pickle', 'wb') as fp:
+            pickle.dump(changes, fp)
+
         for (player_out, player_in) in optimal_trade["trades"][:num_trades]:
             print("Player out")
             player_out.visualize()
@@ -142,79 +155,60 @@ class Agent:
             player_in.visualize()
             current_squad = [player for player in current_squad if player.name != player_out.name] + [player_in]
             non_squad = [player for player in non_squad if player.name != player_in.name] + [player_out]
+        
         return current_squad, non_squad
 
-    def set_playing_11(self, current_squad):
-        acceptable_formations = [[1, 3, 4, 3], [1, 3, 5, 2], [1, 4, 3, 3], 
-            [1, 4, 4, 2], [1, 5, 3, 2], [1, 5, 4, 1], [1, 5, 2, 3]]
+    def set_playing_11(self, current_squad, visualize=False):
+        acceptable_formations = [ {"Goalkeeper" : 1, "Defender" : 3, "Midfielder" : 4, "Forward" : 3},
+                                  {"Goalkeeper" : 1, "Defender" : 3, "Midfielder" : 5, "Forward" : 2},
+                                  {"Goalkeeper" : 1, "Defender" : 4, "Midfielder" : 3, "Forward" : 3},
+                                  {"Goalkeeper" : 1, "Defender" : 4, "Midfielder" : 4, "Forward" : 2},
+                                  {"Goalkeeper" : 1, "Defender" : 5, "Midfielder" : 3, "Forward" : 2},
+                                  {"Goalkeeper" : 1, "Defender" : 5, "Midfielder" : 4, "Forward" : 1},
+                                  {"Goalkeeper" : 1, "Defender" : 5, "Midfielder" : 2, "Forward" : 3},
+                                  {"Goalkeeper" : 1, "Defender" : 3, "Midfielder" : 4, "Forward" : 3}]
         
-        goalkeepers, defenders, midfielders, forwards = [], [], [], []
+        players_by_position = defaultdict(list)
+
         for player in current_squad:
-            if player.position == "Goalkeeper":
-                goalkeepers.append(player)
-            if player.position == "Defender":
-                defenders.append(player)
-            if player.position == "Midfielder":
-                midfielders.append(player)
-            if player.position == "Forward":
-                forwards.append(player)
+            players_by_position[player.position].append(player)
+
+        for position, players in players_by_position.items():
+            players_by_position[position] = sorted(players, key = lambda x : x.predicted_performance, reverse=True)
         
-        goalkeepers = sorted(goalkeepers, key= lambda x : x.predicted_performance, reverse=True)
-        midfielders = sorted(midfielders, key= lambda x : x.predicted_performance, reverse=True)
-        defenders = sorted(defenders, key= lambda x : x.predicted_performance, reverse=True)
-        forwards = sorted(forwards, key= lambda x : x.predicted_performance, reverse=True)
-        best_formation = None
         best_points = -np.inf 
         best_11 = []
-        for (num_goalkeepers, num_defenders, num_midfielders, num_forwards) in acceptable_formations:
+
+        for formation in acceptable_formations:
             this_11 = []
             this_points = 0
-            this_formation = [num_goalkeepers, num_defenders, num_midfielders, num_forwards]
-            for i in range(num_goalkeepers):
-                this_11.append(goalkeepers[i])
-                this_points += goalkeepers[i].predicted_performance
-
-            for i in range(num_defenders):
-                this_11.append(defenders[i])
-                this_points += defenders[i].predicted_performance
-
-            for i in range(num_midfielders):
-                this_11.append(midfielders[i])
-                this_points += midfielders[i].predicted_performance
-
-            for i in range(num_forwards):
-                this_11.append(forwards[i])
-                this_points += forwards[i].predicted_performance
+            for position, num_players_in_position in formation.items():
+                selected_players_in_position = players_by_position[position][:num_players_in_position]
+                this_11.extend(selected_players_in_position)
+                this_points += sum([player.predicted_performance for player in selected_players_in_position])
             
             if this_points > best_points:
                 best_points = this_points
                 best_11 = this_11
-                best_formation = this_formation
         
-        for player in best_11:
-            print(player.name)
-            player.visualize()
-    
+        if visualize:
+            for player in best_11:
+                print(player.name)
+                player.visualize()
+
+        return best_11
 
     def show_top_performers(self, players, k=10):
-        goalkeepers, defenders, midfielders, forwards = [], [], [], []
+        players_by_position = defaultdict(list)
         for player in players:
-            if player.position == "Goalkeeper":
-                goalkeepers.append(player)
-            if player.position == "Defender":
-                defenders.append(player)
-            if player.position == "Midfielder":
-                midfielders.append(player)
-            if player.position == "Forward":
-                forwards.append(player)
-        
-        goalkeepers = sorted(goalkeepers, key= lambda x : x.predicted_performance, reverse=True)[:k]
-        midfielders = sorted(midfielders, key= lambda x : x.predicted_performance, reverse=True)[:k]
-        defenders = sorted(defenders, key= lambda x : x.predicted_performance, reverse=True)[:k]
-        forwards = sorted(forwards, key= lambda x : x.predicted_performance, reverse=True)[:k]
-
-        for player in goalkeepers + midfielders + defenders + forwards:
-            player.visualize()
+            players_by_position[player.position].append(player)
+                
+        for position, players in players_by_position.items():
+            players_by_position[position] = sorted(players, key = lambda x : x.predicted_performance, reverse=True)
+            print(f'\n\n\n\n{position}')
+            for top_player in players_by_position[position][:k]:
+                top_player.visualize()
+            print('\n\n\n\n')
 
 if __name__ == "__main__":
     opponent_feature_names = ["npxG","npxGA"]
@@ -223,4 +217,4 @@ if __name__ == "__main__":
     agent = Agent(player_feature_names, opponent_feature_names)
     asyncio.run(agent.update_model())
     new_squad = asyncio.run(agent.get_new_squad(player_feature_names, opponent_feature_names))
-    set_playing_11(new_squad)
+    agent.set_playing_11(new_squad)

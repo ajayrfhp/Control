@@ -10,7 +10,7 @@ def if_has_gpu_use_gpu():
         torch.set_default_tensor_type(torch.DoubleTensor)
         return False
 
-def fit(model, train_loader, fixed_window=False, input_window=4, epochs=100, use_opponent_feature=False, len_opponent_features=2, learning_rate=1e-3):
+def fit(model, train_loader, fixed_window=True, input_window=4, epochs=100, use_opponent_feature=True, len_opponent_features=2, learning_rate=1e-3):
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     model.train()
     for epoch in range(epochs):
@@ -29,7 +29,7 @@ def fit(model, train_loader, fixed_window=False, input_window=4, epochs=100, use
             loss.backward()
             optimizer.step()
 
-def eval(model, test_loader, input_window=4, use_opponent_feature=False, len_opponent_features=2):
+def eval(model, test_loader, input_window=4, use_opponent_feature=True, len_opponent_features=2):
     sum_loss, count_loss = 0, 0
     sum_corr, count_corr = 0, 0
     model.eval()

@@ -207,18 +207,19 @@ def get_training_datasets(players, teams, window_size=7, batch_size=50):
     X_players = []
     X_opponents = []
     for player in players:
-        opponents = []
-        for i in range(player.player_features.shape[1] - window_size):
-            X_players.append(player.player_features[:,i:i+window_size])
-            opponents.append((i+window_size-1, player.opponents[i+window_size-1]))
-        for i, opponent in opponents:
-            for team in teams:
-                if team.name == opponent:
-                    x_opponent = team.team_features[:,i-window_size+1:i+1]
-                    if x_opponent.shape[1] != window_size:
-                        x_opponent = np.zeros((x_opponent.shape[0], window_size))
-                    X_opponents.append(x_opponent)
-                    break
+        if player.opponents.shape[0]:
+            opponents = []
+            for i in range(player.player_features.shape[1] - window_size):
+                X_players.append(player.player_features[:,i:i+window_size])
+                opponents.append((i+window_size-1, player.opponents[i+window_size-1]))
+            for i, opponent in opponents:
+                for team in teams:
+                    if team.name == opponent:
+                        x_opponent = team.team_features[:,i-window_size+1:i+1]
+                        if x_opponent.shape[1] != window_size:
+                            x_opponent = np.zeros((x_opponent.shape[0], window_size))
+                        X_opponents.append(x_opponent)
+                        break
 
     X_players = np.array(X_players).astype(float)
     X_opponents = np.array(X_opponents).astype(float)
@@ -264,8 +265,10 @@ async def get_current_squad(player_feature_names, team_feature_names, window):
                     player.bank = bank
                     if player.position == "Goalkeeper" and player.bank < cheapest_gk_price:
                         cheapest_gk = player
+                        cheapest_gk_price = cheapest_gk.latest_price
                     if player.position == "Defender" and player.bank < cheapest_defender_price:
                         cheapest_defender = player
+                        cheapest_defender_price = cheapest_defender.latest_price 
                     current_squad_players.append(player)
         
         # Modeller bias, do not swap the cheapest goal keeper or the cheapest defender

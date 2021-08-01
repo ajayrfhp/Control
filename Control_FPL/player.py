@@ -1,4 +1,5 @@
 import numpy as np
+import json
 import seaborn as sns
 from matplotlib import pyplot as plt
 import torch
@@ -23,7 +24,10 @@ class Player:
         self.latest_price = latest_price
         self.player_feature_names = player_feature_names
         self.window = window
-        self.player_features = player_features
+        if player_features.shape[1] == 0:
+            self.player_features = np.zeros((len(player_feature_names), 50))
+        else:
+            self.player_features = player_features
         self.in_current_squad = False
         self.opponents = opponents
         self.latest_features = self.player_features[:,-self.window:].astype(float)
