@@ -49,7 +49,12 @@ def get_player_features(player_feature_names, max_player_points=12):
         ['name', "GW", "minutes", "opponent_team"] + player_feature_names]
     gameweek_data_2020["GW"] = gameweek_data_2020["GW"] + 53
     gameweek_data_2020 = pd.merge(gameweek_data_2020, team_names, left_on = ['opponent_team'], right_on=['id_2020'], how="left")
-    game_weeks = pd.concat((gameweek_data_2019, gameweek_data_2020))
+
+    game_week_data_2021 = pd.read_csv("./data/2021-22/gws/merged_gw.csv")[['name', "GW", "minutes", "opponent_team"] + player_feature_names]
+    game_week_data_2021['GW'] = game_week_data_2021['GW'] + 116
+    game_week_data_2021 = pd.merge(game_week_data_2021, team_names, left_on = ['opponent_team'], right_on=['id_2021'], how="left")
+
+    game_weeks = pd.concat((gameweek_data_2019, gameweek_data_2020, game_week_data_2021))
     game_weeks["opponent"] = game_weeks["normalized_team_name"]
     all_player_features = game_weeks[["name", "opponent"] + player_feature_names]
     all_player_features.fillna(0, inplace=True)

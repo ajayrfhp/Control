@@ -38,6 +38,7 @@ class Player:
         self.in_playing_11 = in_playing_11
         self.num_features = len(self.player_feature_names) + self.latest_opponent_feature.shape[0]
         self.is_useless = False
+        self.len_opponent_features = 2
 
     def visualize(self):
         plt.title(f"{self.name} {self.predicted_performance} {self.chance_of_playing_this_round}")
@@ -53,6 +54,11 @@ class Player:
             self.predicted_performance = 0
             return
         (means, stds) = normalizers
+        if self.latest_opponent_feature.shape[1] != self.window:
+            self.latest_opponent_feature = np.zeros((self.len_opponent_features, self.window))
+        if self.latest_features.shape[1] != self.window:
+            self.latest_features = np.zeros((len(self.player_feature_names), self.window))
+
         x = np.concatenate((self.latest_features, self.latest_opponent_feature), axis=0)
         x = torch.tensor(x).reshape((1, self.num_features, self.window)).double()  # (1, D, L)
         x = x.permute(0, 2, 1) # (N, L, D)
