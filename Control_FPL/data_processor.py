@@ -78,7 +78,7 @@ async def get_players(player_feature_names, team_feature_names, window, visualiz
         players (list): list of player objects
     """
     normalized_team_names = get_normalized_team_names()
-    manual_injuries = ["Diego Jota"]
+    manual_injuries = ["Diego Jota", "Aaron Ramsdale"]
     async with aiohttp.ClientSession() as session:
         fpl = FPL(session) 
         teams = get_teams(team_feature_names, window)
@@ -130,22 +130,28 @@ def get_team_features(team_name, team_feature_names=["npxGA"]):
         features (pd.DataFrame): Pandas Dataframe with values of shape (D, L)
     """
     team_file_name = team_name.replace(" ", "_")
-    team_history, team_current = pd.DataFrame(), pd.DataFrame()
+    team_history, team_current, team_history2 = pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+
+
+    if os.path.exists(f"./data/2021-22/understat/understat_{team_file_name}.csv"):
+        team_current = pd.read_csv(f"./data/2021-22/understat/understat_{team_file_name}.csv")
+        team_current = team_current.reset_index()
+        team_current["index"] += 77
 
     if os.path.exists(f"./data/2020-21/understat/understat_{team_file_name}.csv"):
-        team_current = pd.read_csv(f"./data/2020-21/understat/understat_{team_file_name}.csv")
-        team_current = team_current.reset_index()
-        team_current["index"] += 39
+        team_history = pd.read_csv(f"./data/2020-21/understat/understat_{team_file_name}.csv")
+        team_history = team_history.reset_index()
+        team_history["index"] += 39
 
     if os.path.exists(f"./data/2019-20/understat/understat_{team_file_name}.csv"):
-        team_history = pd.read_csv(f"./data/2019-20/understat/understat_{team_file_name}.csv")
-        team_history = team_history.reset_index()
-        team_history["index"] += 1
+        team_history2 = pd.read_csv(f"./data/2019-20/understat/understat_{team_file_name}.csv")
+        team_history2 = team_history.reset_index()
+        team_history2["index"] += 1
 
-    if not team_current.shape[0] and not team_history.shape[0]:
+    if not team_current.shape[0] and not team_history.shape[0] and not team_history2.shape[0]:
         return pd.DataFrame(0, index=team_feature_names, columns=range(30))
 
-    team_current = pd.concat((team_history, team_current))
+    team_current = pd.concat((team_history2, team_history, team_current))
     features = team_current[team_feature_names].transpose()
     return features
 

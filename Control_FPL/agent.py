@@ -1,5 +1,7 @@
 from collections import defaultdict
+import itertools
 import pickle
+from numpy.testing._private.utils import assert_equal
 import wget
 import os
 import pandas as pd
@@ -19,6 +21,7 @@ from team import Team
 from data_processor import get_fpl, get_current_squad, get_teams, get_players, get_training_datasets
 from models import LinearModel
 from model_utils import fit, eval, load, save, if_has_gpu_use_gpu
+import knapsack
 
 class Agent:
     def __init__(self, player_feature_names, opponent_feature_names, model_path='./trained_models/linear_model.pt', use_opponent_features=True, window=4, epochs=100):
@@ -32,7 +35,7 @@ class Agent:
         self.model_path = model_path
         self.window = window
         self.epochs = epochs
-        os.environ['GAME_WEEK'] = '1_2021'
+        os.environ['GAME_WEEK'] = '2_2021'
     
     async def get_data(self):
         players = await get_players(self.player_feature_names, self.opponent_feature_names, window=self.window, visualize=False, num_players=600)
@@ -139,7 +142,9 @@ class Agent:
             optimal_trade, num_trades = optimal_sequential_double_trade, 1
             if to_hold_for_double:
                 gw, year = os.environ['GAME_WEEK'].split('_')
-                changes[f'{gw+1}_{year}'] = optimal_parallel_double_trade
+                gw = str(int(gw)+1)
+                year = str(year)
+                changes[f'{gw}_{year}'] = optimal_parallel_double_trade
                 optimal_trade, num_trades = optimal_parallel_double_trade, 0
             else:
                 changes[os.environ['GAME_WEEK']] = optimal_single_trade
@@ -171,6 +176,7 @@ class Agent:
         players_by_position = defaultdict(list)
 
         for player in current_squad:
+            print(player)
             players_by_position[player.position].append(player)
 
         for position, players in players_by_position.items():
@@ -209,6 +215,55 @@ class Agent:
             for top_player in players_by_position[position][:k]:
                 top_player.visualize()
             print('\n\n\n\n')
+
+    def get_wildcard_squad(self, squad, max_weight=1000, visualize=False):
+        def knapsack_by_position(squad, position, num_players, max_weight, global_num_teams_in_path):
+            players_in_position = [player for player in squad  if player.position == position ]
+            weights, values, teams = [], [], []
+            for player in players_in_position:
+                weights.append(player.latest_price)
+                total_points = player.player_features[-15:,0].mean() / 10# lazy approximation
+                form_points = player.predicted_performance 
+                weighted_points = total_points + form_points
+                values.append(weighted_points)
+                teams.append(player.team)
+            return knapsack.solve_knapsack(weights=weights, values=values, names=players_in_position, max_weight=max_weight, num_players=num_players, teams=teams, global_num_teams_in_path=global_num_teams_in_path)
+        
+        # Modeller bias - select 3 contributing defenders, 4 midfielders, 2 forwards and 1 gk. Choose filler players for other posiiton
+        positions = [('Goalkeeper', 2, 1), ('Defender', 5, 3), ('Midfielder', 5, 4), ('Forward', 3, 2)] 
+        best_15, best_value = [], -np.inf
+        
+        # Solve 4 knsack problems in random orders and find what works the best. This could be replaced with a 3 dimensional knapsack.
+        for (position_ordering) in itertools.permutations(positions):
+            budget = max_weight
+            potential_best_15, potential_best_value = [], 0
+            
+            global_num_teams_in_path = defaultdict(int)
+            for position, num_players, num_contribution in position_ordering:
+                # choose best 11 by knapsack
+                best_player_in_position, best_weights_in_position, best_values_in_position, global_num_teams_in_path = knapsack_by_position(squad, position, num_contribution, budget, global_num_teams_in_path)
+                budget -= sum(best_weights_in_position)
+                potential_best_15.extend(list(best_player_in_position))
+                potential_best_value += sum(best_values_in_position)
+                
+                # choose cheap filler players
+                players_in_position = [player for player in squad if player.position == position and global_num_teams_in_path[player.team] <= 2]
+                players_in_position = sorted(players_in_position, key = lambda x : x.latest_price)[:(num_players-num_contribution)]
+                budget -= sum([player.latest_price for player in players_in_position])
+                potential_best_15.extend(players_in_position)  
+            
+            
+            potential_best_15 = sorted(potential_best_15, key = lambda x : x.position)
+            if potential_best_value >= best_value and len(potential_best_15) == 15:
+                best_15 = list(potential_best_15)
+                best_value = potential_best_value
+
+        for value in global_num_teams_in_path.values():
+            assert(value <= 3)
+        if visualize:
+            for player in best_15:    
+                player.visualize()
+        return best_15
 
 if __name__ == "__main__":
     opponent_feature_names = ["npxG","npxGA"]

@@ -1,9 +1,11 @@
+from collections import defaultdict
 import numpy as np
 import unittest
 import os
 import pickle
 from data_processor import get_player_features, get_team_features, get_teams, get_players, get_training_datasets, get_current_squad
 from agent import Agent
+import knapsack
 import asyncio
 
 class TestDataProcessor(unittest.TestCase):
@@ -98,6 +100,30 @@ class TestAsync(unittest.IsolatedAsyncioTestCase):
 
         best_11 = agent.set_playing_11(current_squad)
         self.assertEqual(len(best_11), 11)
+
+    async def test_get_wildcard_squad(self):
+        opponent_feature_names = ["npxG","npxGA"]
+        player_feature_names = ["total_points", "ict_index", "clean_sheets", "saves", "assists"]
+        agent = Agent(player_feature_names, opponent_feature_names, epochs=1)
+        await agent.update_model()
+
+        current_squad, non_squad = await agent.get_new_squad(player_feature_names, opponent_feature_names)
+        best_15 = agent.get_wildcard_squad(current_squad + non_squad)
+        self.assertEqual(len(best_15), 15)
+
+class TestWildcard(unittest.TestCase):
+    def test_knapsack(self):
+        path, weights, values, team_dict = knapsack.solve_knapsack(weights=[4, 3, 1], values=[2, 2, 1], names=['a', 'b', 'c'],max_weight=5, num_players=3, teams=['t1','t1','t1'], max_players_from_one_team=2, global_num_teams_in_path=defaultdict(int))
+        self.assertCountEqual(path, ['b','c'])
+        self.assertCountEqual(weights, [3, 1])
+        self.assertCountEqual(values, [2, 1])
+
+        path, weights, values, team_dict = knapsack.solve_knapsack(weights=[4, 3, 1], values=[2, 2, 1], names=['a', 'b', 'c'],max_weight=5, num_players=3, teams=['t1','t1','t1'], max_players_from_one_team=1, global_num_teams_in_path=defaultdict(int))
+        self.assertCountEqual(path, ['b'])
+        self.assertCountEqual(weights, [3])
+        self.assertCountEqual(values, [2])
+
+    
 
 
 
