@@ -115,3 +115,31 @@
   - Add decent training viz 
 - Log changes, current squad, new_squad and top players with agent.ipynb
   - Generate static agent_GAMEWEEK_ID.html and publish 
+- Bayesian linear model 
+    - Predict player scores with uncertainity
+
+
+# 12 Aug 09:51
+- Code refactoring
+  - Test playing 11 function
+  - Add wildcard capability in a standaline file. Wildcard should choose cheapest gk and defender first 
+  - Add decent training viz 
+  - When forced to a rigid deadline, the code you are going to write is unlikely to be clean and that is okay. Get minimal working stuff done by deadline.
+- Log changes, current squad, new_squad and top players with agent.ipynb
+  - Generate static agent_GAMEWEEK_ID.html and publish 
+- Bayesian linear model 
+    - Predict player scores with uncertainity
+
+
+# 21 Aug 00:00
+- Code refactoring
+  - Add wildcard capability in a standaline file.
+  - Add no player from same team constraint to wildcard
+  - Add decent training viz 
+  - Changes for different users should come from different files.
+  - I write my best code when I am happy, when I have a reasonably clear idea of a timeline, of what to do, not a rigid deadline, should be mentally free, saturday mornings are great for thinking clearly.
+- Bayesian linear model 
+    - Predict player scores with uncertainity
+
+
+

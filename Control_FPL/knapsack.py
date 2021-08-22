@@ -34,8 +34,6 @@ def solve_knapsack(weights, values, names, max_weight, num_players, teams=[], ma
             for team in teams_in_path[i-1][j-weights[i-1]]:
                 num_teams_in_path[team] += 1
             is_valid = num_teams_in_path[teams[i-1]] < max_players_from_one_team and global_num_teams_in_path[teams[i-1]] < max_players_from_one_team
-
-
             if is_valid and j >= weights[i-1] and (values[i-1] + dp[i-1][j-weights[i-1]] >= dp[i-1][j]) and len(paths[i-1][j-weights[i-1]]) < num_players:
                 dp[i][j] = values[i-1] + dp[i-1][j-weights[i-1]]
                 paths[i][j].extend(paths[i-1][j-weights[i-1]] + [names[i-1]])

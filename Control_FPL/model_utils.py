@@ -10,6 +10,13 @@ def if_has_gpu_use_gpu():
         torch.set_default_tensor_type(torch.DoubleTensor)
         return False
 
+def pearson_correlation(x, y):
+    vx = x - torch.mean(x)
+    vy = y - torch.mean(y)
+    numerator = torch.sum(vx*vy)
+    denominator = torch.sqrt(torch.sum(vx**2)*torch.sum(vy**2))
+    return numerator/denominator
+
 def fit(model, train_loader, fixed_window=True, input_window=4, epochs=100, use_opponent_feature=True, len_opponent_features=2, learning_rate=1e-3):
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     model.train()
@@ -42,9 +49,7 @@ def eval(model, test_loader, input_window=4, use_opponent_feature=True, len_oppo
         assert(predictions.shape == outputs.shape)
         residual = (predictions - outputs)
         loss = (residual * residual).mean().item()
-        outputs_numpy = outputs.detach().cpu().numpy()
-        predictions_numpy = predictions.detach().cpu().numpy()
-        corr = np.corrcoef(predictions_numpy, outputs_numpy)[0, 1]
+        corr = pearson_correlation(predictions, outputs)
         sum_loss += loss 
         count_loss += 1
         sum_corr += corr 

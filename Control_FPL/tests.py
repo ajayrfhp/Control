@@ -3,10 +3,12 @@ import numpy as np
 import unittest
 import os
 import pickle
-from data_processor import get_player_features, get_team_features, get_teams, get_players, get_training_datasets, get_current_squad
 from agent import Agent
+from data_processor import get_player_features, get_team_features, get_teams, get_players, get_training_datasets, get_current_squad
+from model_utils import pearson_correlation
 import knapsack
 import asyncio
+import torch
 
 class TestDataProcessor(unittest.TestCase):
     def test_get_player_features(self):
@@ -44,6 +46,22 @@ class TestDataProcessor(unittest.TestCase):
             self.assertCountEqual(team.team_feature_names, team_feature_names)
             self.assertEqual(team.window, window)
             self.assertEqual(team.get_recent_team_features().shape[1], window)
+
+    def test_correlation(self):
+        test_cases = [[[1, 2, 3],[2, 4, 6],1],
+                      [[1,0],[0,1],-1],
+                      [[3, 5, 122], [4,5,209], None],
+                      [[992, 100],[854, 123],None]]
+
+        for (test_x, test_y, expected_correlation_score) in test_cases:
+            test_x = torch.tensor(test_x).float()
+            test_y = torch.tensor(test_y).float()
+            correlation = pearson_correlation(test_x, test_y).cpu().detach().item()
+            if expected_correlation_score:
+                self.assertAlmostEqual(correlation, expected_correlation_score)
+            else:
+                self.assertTrue(correlation >= -1 and correlation <= 1)
+
 
 class TestAsync(unittest.IsolatedAsyncioTestCase):
     async def test_get_players(self):

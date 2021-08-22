@@ -21,6 +21,7 @@ from team import Team
 from data_processor import get_fpl, get_current_squad, get_teams, get_players, get_training_datasets
 from models import LinearModel
 from model_utils import fit, eval, load, save, if_has_gpu_use_gpu
+from key import *
 import knapsack
 
 class Agent:
@@ -36,6 +37,7 @@ class Agent:
         self.window = window
         self.epochs = epochs
         os.environ['GAME_WEEK'] = '2_2021'
+        self.changes_file = f'changes_{email}.pickle'
     
     async def get_data(self):
         players = await get_players(self.player_feature_names, self.opponent_feature_names, window=self.window, visualize=False, num_players=600)
@@ -127,7 +129,7 @@ class Agent:
         
         changes = {}
         try:
-            with open('changes.pickle', 'rb') as fp:
+            with open(self.changes_file, 'rb') as fp:
                 changes = pickle.load(fp)
         except :
             pass
@@ -143,14 +145,13 @@ class Agent:
             if to_hold_for_double:
                 gw, year = os.environ['GAME_WEEK'].split('_')
                 gw = str(int(gw)+1)
-                year = str(year)
                 changes[f'{gw}_{year}'] = optimal_parallel_double_trade
                 optimal_trade, num_trades = optimal_parallel_double_trade, 0
             else:
                 changes[os.environ['GAME_WEEK']] = optimal_single_trade
                 optimal_trade, num_trades = optimal_single_trade, 1
 
-        with open('changes.pickle', 'wb') as fp:
+        with open(self.changes_file, 'wb') as fp:
             pickle.dump(changes, fp)
 
         for (player_out, player_in) in optimal_trade["trades"][:num_trades]:
