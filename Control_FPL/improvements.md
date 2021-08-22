@@ -137,9 +137,39 @@
   - Add no player from same team constraint to wildcard
   - Add decent training viz 
   - Changes for different users should come from different files.
-  - I write my best code when I am happy, when I have a reasonably clear idea of a timeline, of what to do, not a rigid deadline, should be mentally free, saturday mornings are great for thinking clearly.
 - Bayesian linear model 
     - Predict player scores with uncertainity
 
+# 22 Aug 11:35
+- Code refactoring
+  - Add decent training viz 
+  - Changes for different users should come from different files.
+  - I write my best code when I am happy, when I have a reasonably clear idea of a timeline, of what to do, not a rigid deadline, should be mentally free, saturday mornings are great for thinking clearly.
+- Bayesian linear model 
+    - Predict player scores with uncertainity
+- Better pin packing
+  - Constrained solvers - Siddarth's idea
+  - 3d knapsack
+- Better pipeline
+  - Automatically figure out game week id
+  - Figure out injuries
+  - Transfer should be automatic 
+  - Download, model run, squad update all should be controlled by a pipeline like airflow 
 
+# 23 Aug 10:35
+- Code refactoring
+  - Add decent training viz 
+    - How is model improving over time and with more data ?
+  - Add GPU training to make training faster
+- Bayesian linear model 
+    - Predict player scores with uncertainity
+- Better pin packing
+  - Constrained solvers - Siddarth's idea
+  - 3d knapsack
+- Use NLP to get injury information from twitter - Siddarth's idea.
+- Better pipeline
+  - Automatically figure out game week id
+  - Figure out injuries
+  - Transfer should be automatic 
+  - Download, model run, squad update all should be controlled by a pipeline like airflow 
 
