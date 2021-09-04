@@ -173,3 +173,38 @@
   - Transfer should be automatic 
   - Download, model run, squad update all should be controlled by a pipeline like airflow 
 
+# 3 Sep 00:20
+- Code refactoring
+  - How to implement system deciding to do double transfers ?
+    - Get number of transfers available per user, if double transfers are optimal, make no changes now and just make changes next week. 
+    - Ensure that window size and length of opponent features are initialized and passed around minimally. 
+  - Add decent training viz 
+    - How is model improving over time and with more data ?
+  - Add GPU training to make training faster
+- Bayesian linear model 
+    - Predict player scores with uncertainity
+- Better pin packing
+  - Constrained solvers - Siddarth's idea
+  - 3d knapsack
+- Use NLP to get injury information from twitter - Siddarth's idea.
+- Better pipeline
+  - Automatically figure out game week id
+  - Figure out injuries
+  - Transfer should be automatic 
+  - Download, model run, squad update all should be controlled by a pipeline like airflow 
+
+# 4 Sep 11:49
+- Code refactoring
+  - Add training viz and GPU training with pytorch lightning.
+  - [Watch pytorch lightning intro video](https://www.youtube.com/watch?v=DbESHcCoWbM&list=PLaMu-SDt_RB5NUm67hU2pdE75j6KaIOv2&index=3&ab_channel=PyTorchLightning)
+- Bayesian linear model 
+    - Predict player scores with uncertainity
+- Better pin packing
+  - Constrained solvers - Siddarth's idea
+  - 3d knapsack
+- Use NLP to get injury information from twitter - Siddarth's idea.
+- Better pipeline
+  - Automatically figure out game week id
+  - Figure out injuries
+  - Transfer should be automatic 
+  - Download, model run, squad update all should be controlled by an orchestration engine. 

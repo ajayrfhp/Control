@@ -36,8 +36,7 @@ class Agent:
         self.model_path = model_path
         self.window = window
         self.epochs = epochs
-        os.environ['GAME_WEEK'] = '2_2021'
-        self.changes_file = f'changes_{email}.pickle'
+        os.environ['GAME_WEEK'] = '3_2021'
     
     async def get_data(self):
         players = await get_players(self.player_feature_names, self.opponent_feature_names, window=self.window, visualize=False, num_players=600)
@@ -127,40 +126,27 @@ class Agent:
                             "trades_gain" : optimal_trades_gain}
             return trade_info
         
-        changes = {}
-        try:
-            with open(self.changes_file, 'rb') as fp:
-                changes = pickle.load(fp)
-        except :
-            pass
-
-        if os.environ['GAME_WEEK'] in changes.keys():
-            optimal_trade, num_trades = changes[os.environ['GAME_WEEK']], 2
+        num_transfers_avalable = current_squad[0].num_transfers_available
+        optimal_sequential_double_trade = get_optimal_sequential_double_trade(current_squad, non_squad)
+        optimal_parallel_double_trade = get_optimal_parallel_double_trade(current_squad, non_squad)
+        to_hold_for_double = optimal_parallel_double_trade["trades_gain"] > optimal_sequential_double_trade["trades_gain"]
+        optimal_trade, num_trades = None, 0
+        if to_hold_for_double:
+            optimal_trade, num_trades = optimal_parallel_double_trade, 2
         else:
-            optimal_single_trade = get_optimal_sequential_double_trade(current_squad, non_squad, num_trades=1)
-            optimal_sequential_double_trade = get_optimal_sequential_double_trade(current_squad, non_squad)
-            optimal_parallel_double_trade = get_optimal_parallel_double_trade(current_squad, non_squad)
-            to_hold_for_double = optimal_parallel_double_trade["trades_gain"] > optimal_sequential_double_trade["trades_gain"]
-            optimal_trade, num_trades = optimal_sequential_double_trade, 1
-            if to_hold_for_double:
-                gw, year = os.environ['GAME_WEEK'].split('_')
-                gw = str(int(gw)+1)
-                changes[f'{gw}_{year}'] = optimal_parallel_double_trade
-                optimal_trade, num_trades = optimal_parallel_double_trade, 0
-            else:
-                changes[os.environ['GAME_WEEK']] = optimal_single_trade
-                optimal_trade, num_trades = optimal_single_trade, 1
-
-        with open(self.changes_file, 'wb') as fp:
-            pickle.dump(changes, fp)
+            optimal_single_trade = get_optimal_sequential_double_trade(current_squad, non_squad, num_trades=num_transfers_avalable)
+            optimal_trade, num_trades = optimal_single_trade, num_transfers_avalable
 
         for (player_out, player_in) in optimal_trade["trades"][:num_trades]:
-            print("Player out")
+            if not to_hold_for_double:        
+                current_squad = [player for player in current_squad if player.name != player_out.name] + [player_in]
+                non_squad = [player for player in non_squad if player.name != player_in.name] + [player_out]
+            
+            print(f"Player out {player_out.name}. To double trade  = {to_hold_for_double} ")
             player_out.visualize()
-            print("Player in")
+            print(f"Player in {player_in.name}. To double trade  = {to_hold_for_double} ")
             player_in.visualize()
-            current_squad = [player for player in current_squad if player.name != player_out.name] + [player_in]
-            non_squad = [player for player in non_squad if player.name != player_in.name] + [player_out]
+                
         
         return current_squad, non_squad
 
@@ -177,7 +163,7 @@ class Agent:
         players_by_position = defaultdict(list)
 
         for player in current_squad:
-            print(player)
+            print(player.name)
             players_by_position[player.position].append(player)
 
         for position, players in players_by_position.items():
@@ -214,6 +200,7 @@ class Agent:
             players_by_position[position] = sorted(players, key = lambda x : x.predicted_performance, reverse=True)
             print(f'\n\n\n\n{position}')
             for top_player in players_by_position[position][:k]:
+                print(top_player.name)
                 top_player.visualize()
             print('\n\n\n\n')
 
@@ -272,5 +259,6 @@ if __name__ == "__main__":
 
     agent = Agent(player_feature_names, opponent_feature_names)
     asyncio.run(agent.update_model())
-    new_squad = asyncio.run(agent.get_new_squad(player_feature_names, opponent_feature_names))
+    new_squad, non_squad = asyncio.run(agent.get_new_squad(player_feature_names, opponent_feature_names))
     agent.set_playing_11(new_squad)
+    agent.show_top_performers(new_squad + non_squad, k=10)

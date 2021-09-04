@@ -78,7 +78,7 @@ async def get_players(player_feature_names, team_feature_names, window, visualiz
         players (list): list of player objects
     """
     normalized_team_names = get_normalized_team_names()
-    manual_injuries = ["Diego Jota", "Aaron Ramsdale"]
+    manual_injuries = ["Diego Jota", "Aaron Ramsdale", 'Fabio Henrique Tavares']
     async with aiohttp.ClientSession() as session:
         fpl = FPL(session) 
         teams = get_teams(team_feature_names, window)
@@ -203,7 +203,7 @@ def normalize(x, is_scalar=False):
         normalized_x = normalized_x.permute(0, 2, 1)
         return normalized_x, means, stds
 
-def get_training_datasets(players, teams, window_size=7, batch_size=50):
+def get_training_datasets(players, teams, window_size=5, batch_size=500):
     """Function builds data loaders for contextual prediction
 
     Args:
@@ -263,7 +263,9 @@ async def get_current_squad(player_feature_names, team_feature_names, window):
         fpl = FPL(session)
         await fpl.login(email=email, password=password)
         user = await fpl.get_user(user_id)
-        bank = (await user.get_transfers_status())["bank"] 
+        user_transfer_status = await user.get_transfers_status()
+        num_transfers_available = user_transfer_status['limit']
+        bank = user_transfer_status["bank"]
         squad = await user.get_team()    
 
 
@@ -274,6 +276,7 @@ async def get_current_squad(player_feature_names, team_feature_names, window):
                 if player.id == player_element["element"]:
                     player.in_current_squad = True
                     player.bank = bank
+                    player.num_transfers_available = num_transfers_available
                     if player.position == "Goalkeeper" and player.bank < cheapest_gk_price:
                         cheapest_gk = player
                         cheapest_gk_price = cheapest_gk.latest_price
