@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import torch.optim as optim
+import pytorch_lightning as pl
 
 def if_has_gpu_use_gpu():
     if torch.cuda.device_count() >= 1:
@@ -61,3 +62,4 @@ def save(model, model_path):
 
 def load(model, model_path):
     model.load_state_dict(torch.load(model_path))
+

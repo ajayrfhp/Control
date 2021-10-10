@@ -1,9 +1,10 @@
 import torch
 import torch.nn as nn
+import pytorch_lightning as pl
 
 class AvgModel(nn.Module):
-    def __init__(self, model_path='./trained_models/avg_model.pt'):
-        self.model_path = model_path
+    def __init__(self):
+        pass
     
     def forward(self, x):
         """Model gets average player score in the previous matches
@@ -17,8 +18,8 @@ class AvgModel(nn.Module):
         return x[:,0,:].mean(dim=1).reshape((-1, ))
 
 class PrevModel(nn.Module):
-    def __init__(self, model_path='./trained_models/prev_model.pt'):
-        self.model_path = model_path
+    def __init__(self):
+        pass
 
     def forward(self, x):
         """Model gets predicts next score as previous score of player
@@ -55,6 +56,45 @@ class RNNModel(nn.Module):
         o = self.fc(h[-1][-1])
         return o.reshape((-1, ))
 
+class LightningWrapper(pl.LightningModule):
+    def __init__(self, window_size=4, num_features=7, use_opponent_features=True, len_opponent_features=2, model_type='linear'):
+        super().__init__()
+        self.window_size = window_size
+        self.dim = window_size * num_features
+        self.use_opponent_features = use_opponent_features
+        self.len_opponent_features = len_opponent_features
+        if model_type == 'linear':
+            self.model = LinearModel(window_size, num_features)
+        elif model_type == 'RNN':
+            self.model =  RNNModel(window_size, num_features)
+        elif model_type == 'previous':
+            self.model =  PrevModel()
+        else:
+            self.model =  AvgModel()
+        self.model_type = model_type
+    
+    def forward(self, x):
+        return self.model.forward(x)
+
+    def training_step(self, batch, batch_idx):
+        x = batch[0]
+        inputs = x[:,:,:self.window_size]
+        outputs = x[:,0,self.window_size]
+        predictions = self.model.forward(inputs)
+        loss = nn.MSELoss()(predictions, outputs)
+        self.log(f'{self.model_type} = train_loss', loss)
+        return loss 
+
+    def validation_step(self, batch, batch_idx):
+        loss = self.training_step(batch, batch_idx)
+        self.log(f'{self.model_type} = val_loss', loss)
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+        return optimizer
+    
+
+
 if __name__ == "__main__":
     input_tensor = torch.tensor([[0, 2, 4, 6], [1, 3, 5, 7]]).reshape((2, 1, 4)).double()
     prev_model = PrevModel()
@@ -66,5 +106,4 @@ if __name__ == "__main__":
     print(linear_model.forward(input_tensor))
     print(rnn_model.forward(input_tensor).shape)
     rnn_model = RNNModel()
-    save(rnn_model, "./trained_models/rnn_model.pt")
-    load(rnn_model, "./trained_models/rnn_model.pt")
+    

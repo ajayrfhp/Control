@@ -203,7 +203,7 @@ def normalize(x, is_scalar=False):
         normalized_x = normalized_x.permute(0, 2, 1)
         return normalized_x, means, stds
 
-def get_training_datasets(players, teams, window_size=5, batch_size=500):
+def get_training_datasets(players, teams, window_size=5, batch_size=500, num_workers=20):
     """Function builds data loaders for contextual prediction
 
     Args:
@@ -211,6 +211,7 @@ def get_training_datasets(players, teams, window_size=5, batch_size=500):
         teams (list[teams]): List of teams
         window_size (int, optional): max window size for contextual prediction. Defaults to 7.
         batch_size (int, optional): batch size for data loader. Defaults to 50.
+        num_workers(int, optional) : number of cpus to use as workers. Defaults to 20
 
     Returns:
         train_loader, test_loader, (means, stds) (DataLoader, DataLoader, tuple): train, test data loaders and normalizers
@@ -242,8 +243,8 @@ def get_training_datasets(players, teams, window_size=5, batch_size=500):
         X = X.cuda()
     X, means, stds = normalize(X)
     X_train, X_test = X[indices[:train_length]], X[indices[train_length:]] 
-    train_loader = DataLoader(TensorDataset(X_train,), batch_size=batch_size)
-    test_loader = DataLoader(TensorDataset(X_test,), batch_size=batch_size)
+    train_loader = DataLoader(TensorDataset(X_train,), batch_size=batch_size, num_workers=num_workers)
+    test_loader = DataLoader(TensorDataset(X_test,), batch_size=batch_size, num_workers=num_workers)
     return train_loader, test_loader, (means, stds)
 
 async def get_current_squad(player_feature_names, team_feature_names, window):

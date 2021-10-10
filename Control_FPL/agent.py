@@ -19,24 +19,26 @@ from torch.utils.data import TensorDataset, DataLoader
 from player import Player
 from team import Team
 from data_processor import get_fpl, get_current_squad, get_teams, get_players, get_training_datasets
-from models import LinearModel
-from model_utils import fit, eval, load, save, if_has_gpu_use_gpu
+from models import LightningWrapper
+from model_utils import if_has_gpu_use_gpu
 from key import *
 import knapsack
+import pytorch_lightning as pl
 
 class Agent:
-    def __init__(self, player_feature_names, opponent_feature_names, model_path='./trained_models/linear_model.pt', use_opponent_features=True, window=4, epochs=100):
+    def __init__(self, player_feature_names, opponent_feature_names, use_opponent_features=True, window=4, epochs=100):
         self.player_feature_names = player_feature_names
         self.opponent_feature_names = opponent_feature_names
-        self.model = LinearModel(num_features=len(player_feature_names) + len(opponent_feature_names)).double()
+        self.model = LightningWrapper(window_size=window, num_features=len(player_feature_names) + len(opponent_feature_names), use_opponent_features=use_opponent_features, len_opponent_features=len(opponent_feature_names), model_type='linear')
         if if_has_gpu_use_gpu():
             self.model = self.model.cuda()
         self.players = None
         self.train_loader, self.test_loader, self.normalizers = None, None, None
-        self.model_path = model_path
         self.window = window
         self.epochs = epochs
-        os.environ['GAME_WEEK'] = '3_2021'
+        self.trainer = pl.Trainer(max_epochs=epochs)
+        
+
     
     async def get_data(self):
         players = await get_players(self.player_feature_names, self.opponent_feature_names, window=self.window, visualize=False, num_players=600)
@@ -46,14 +48,12 @@ class Agent:
 
     async def update_model(self):
         await self.get_data()
-        fit(self.model, self.train_loader, fixed_window=True, epochs=self.epochs)
-        save(self.model, self.model_path)
-        print(eval(self.model, self.test_loader))
+        self.trainer.fit(self.model, self.train_loader, self.test_loader)
 
     async def get_new_squad(self, player_feature_names, team_feature_names):
         current_squad, non_squad = await get_current_squad(player_feature_names, team_feature_names, window=self.window)
         for player in current_squad + non_squad:
-            player.predict_next_performance(self.model, self.normalizers)
+            player.predict_next_performance(self.model.model, self.normalizers)
         current_squad, non_squad = self.make_optimal_trade(current_squad, non_squad)
         return current_squad, non_squad
 
@@ -66,18 +66,24 @@ class Agent:
             Function considers trade for only 13 players. 
         '''
         def get_optimal_single_trade(current_squad, non_squad,  traded = []):
+            players_in_same_team = defaultdict(int)
+            for player in current_squad:
+                players_in_same_team[player.team] += 1
+            
             optimal_trade_gain, optimal_trade = 0, None
             for player_out in current_squad:
+                players_in_same_team[player_out.team] -= 1
                 if not player_out.is_useless:
                     for player_in in non_squad:
                         if len(traded) >= 1:
                             if player_out == traded[0][0] or player_in == traded[0][1]:
                                 continue
-                        if player_in.position == player_out.position and player_in.latest_price  <= player_out.latest_price + player_out.bank:
+                        if player_in.position == player_out.position and player_in.latest_price  <= player_out.latest_price + player_out.bank and players_in_same_team[player_in.team] <= 2:
                             trade_gain = player_in.predicted_performance - player_out.predicted_performance
                             if trade_gain > optimal_trade_gain:
                                 optimal_trade_gain = trade_gain
                                 optimal_trade = (player_out, player_in)
+                players_in_same_team[player_out.team] += 1
             return optimal_trade, optimal_trade_gain
 
         def get_optimal_sequential_double_trade(current_squad, non_squad, num_trades=2):
@@ -102,8 +108,13 @@ class Agent:
             '''
             optimal_trades = []
             optimal_trades_gain = 0
+            players_in_same_team = defaultdict(int)
+            for player in current_squad:
+                players_in_same_team[player.team] += 1
             for player_out1 in current_squad:
+                players_in_same_team[player_out1.team] -= 1
                 for player_out2 in current_squad:
+                    players_in_same_team[player_out2.team] -= 1
                     if not player_out1.is_useless and not player_out2.is_useless:
                         for player_in1 in non_squad:
                             for player_in2 in non_squad:
@@ -115,13 +126,16 @@ class Agent:
                                 selling_price = player_out1.latest_price + player_out2.latest_price 
                                 buying_price = player_in1.latest_price + player_in2.latest_price
                                 within_budget = selling_price + player_out2.bank >= buying_price
-                                if different_players and same_positions and within_budget:
+                                different_teams = players_in_same_team[player_in1.team] <= 2 and players_in_same_team[player_in2.team] <= 2
+                                if different_players and same_positions and within_budget and different_teams:
                                     trades_gain += (player_in1.predicted_performance + player_in2.predicted_performance) 
                                     trades_gain -= (player_out1.predicted_performance + player_out2.predicted_performance)
                                     if trades_gain > optimal_trades_gain:
                                         optimal_trades_gain = trades_gain
                                         optimal_trades = [(player_out1, player_in1), 
                                                         (player_out2, player_in2)]
+                    players_in_same_team[player_out2.team] += 1
+                players_in_same_team[player_out1.team] += 1
             trade_info =  { "trades" : optimal_trades,
                             "trades_gain" : optimal_trades_gain}
             return trade_info
