@@ -197,6 +197,8 @@
 - Code refactoring
   - Add training viz and GPU training with pytorch lightning.
   - [Watch pytorch lightning intro video](https://www.youtube.com/watch?v=DbESHcCoWbM&list=PLaMu-SDt_RB5NUm67hU2pdE75j6KaIOv2&index=3&ab_channel=PyTorchLightning)
+  - Make GPU work in windows
+  - Move all training to lightning. 
 - Bayesian linear model 
     - Predict player scores with uncertainity
 - Better pin packing
@@ -208,3 +210,36 @@
   - Figure out injuries
   - Transfer should be automatic 
   - Download, model run, squad update all should be controlled by an orchestration engine. 
+
+# 6 Sep 11:42
+- Code refactoring
+  - Make GPU work in windows
+  - Move all training to lightning. 
+- Bayesian linear model 
+    - Predict player scores with uncertainity
+- Better pin packing
+  - Constrained solvers - Siddarth's idea
+  - 3d knapsack
+- Use NLP to get injury information from twitter - Siddarth's idea.
+- Better pipeline
+  - Automatically figure out game week id
+  - Figure out injuries
+  - Transfer should be automatic 
+  - Download, model run, squad update all should be controlled by an orchestration engine. 
+
+# 10 Oct 07:31
+- Code refactoring
+  - Make GPU work in windows
+  - Move all training to lightning
+  - Separate out getting latest data, getting latest model and latest squad
+    - It should be possible to use last trained model for inference on latest data to get latest squad.
+- Bayesian linear model
+  - Predict player scores with uncertainity
+- Better bin packing
+  - 3d knapsack
+- Use NLP to get injury information from twitter - Siddarth's idea
+- Better pipeline
+  - Automatically figure out game week id
+  - Figure out injuries
+  - Transfer should be automatic 
+  - Download, model run, squad update all should be controlled by an orchestration engine.
