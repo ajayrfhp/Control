@@ -3,7 +3,7 @@ import json
 import seaborn as sns
 from matplotlib import pyplot as plt
 import torch
-from model_utils import if_has_gpu_use_gpu
+from models import if_has_gpu_use_gpu
 
 class Player:
     def __init__(self, id, name, integer_position, team, latest_price, 

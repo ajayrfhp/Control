@@ -15,7 +15,7 @@ from torch.utils.data import TensorDataset, DataLoader
 from player import Player
 from team import Team
 from key import *
-from model_utils import if_has_gpu_use_gpu
+from models import if_has_gpu_use_gpu
 
 
 def get_normalized_team_names():
@@ -78,7 +78,7 @@ async def get_players(player_feature_names, team_feature_names, window, visualiz
         players (list): list of player objects
     """
     normalized_team_names = get_normalized_team_names()
-    manual_injuries = ["Diego Jota", "Aaron Ramsdale", 'Fabio Henrique Tavares']
+    manual_injuries = []
     async with aiohttp.ClientSession() as session:
         fpl = FPL(session) 
         teams = get_teams(team_feature_names, window)
@@ -247,19 +247,20 @@ def get_training_datasets(players, teams, window_size=5, batch_size=500, num_wor
     test_loader = DataLoader(TensorDataset(X_test,), batch_size=batch_size, num_workers=num_workers)
     return train_loader, test_loader, (means, stds)
 
-async def get_current_squad(player_feature_names, team_feature_names, window):
+async def get_current_squad(player_feature_names, team_feature_names, window, num_players=600):
     """function gets player lists for players in squad and out of squad
 
     Args:
         player_feature_names (list): names of player related features
         team_feature_names (list): names of team related features
         window (int) : window size
+        num_players (int) : number of players
 
     Returns:
         current_squad, non_squad(list, list): players in squad, players out of squad
     """
     current_squad_players, non_squad_players = [], []
-    players = await get_players(player_feature_names, team_feature_names, window)
+    players = await get_players(player_feature_names, team_feature_names, window, num_players=num_players)
     async with aiohttp.ClientSession() as session:
         fpl = FPL(session)
         await fpl.login(email=email, password=password)

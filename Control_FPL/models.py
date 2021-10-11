@@ -2,6 +2,14 @@ import torch
 import torch.nn as nn
 import pytorch_lightning as pl
 
+def if_has_gpu_use_gpu():
+    if torch.cuda.device_count() >= 1:
+        torch.set_default_tensor_type(torch.cuda.DoubleTensor)
+        return True
+    else:
+        torch.set_default_tensor_type(torch.DoubleTensor)
+        return False
+
 class AvgModel(nn.Module):
     def __init__(self):
         pass

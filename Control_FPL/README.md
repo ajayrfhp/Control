@@ -14,3 +14,11 @@ a
 
 ## What is the type of data available ?
 - We know values obtained by players in the previous seasons against various opponents
+
+
+
+## Installation
+- [Setup CUDA pytorch on WSL](https://christianjmills.com/Using-PyTorch-with-CUDA-on-WSL2/)
+
+## Resources
+- [Alan turing institute](https://github.com/alan-turing-institute/AIrsenal)

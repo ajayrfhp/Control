@@ -108,8 +108,9 @@ class TestAsync(unittest.IsolatedAsyncioTestCase):
         opponent_feature_names = ["npxG","npxGA"]
         player_feature_names = ["total_points", "ict_index", "clean_sheets", "saves", "assists"]
         agent = Agent(player_feature_names, opponent_feature_names, epochs=1)
+        await agent.get_data()
         await agent.update_model()
-        self.assertTrue(os.path.exists("./trained_models/linear_model.pt"))
+        self.assertTrue(os.path.exists(f"{agent.model_directory}latest.ckpt"))
 
         current_squad, non_squad = await agent.get_new_squad(player_feature_names, opponent_feature_names)
         self.assertEqual(len(current_squad), 15)
@@ -123,6 +124,7 @@ class TestAsync(unittest.IsolatedAsyncioTestCase):
         opponent_feature_names = ["npxG","npxGA"]
         player_feature_names = ["total_points", "ict_index", "clean_sheets", "saves", "assists"]
         agent = Agent(player_feature_names, opponent_feature_names, epochs=1)
+        await agent.get_data()
         await agent.update_model()
 
         current_squad, non_squad = await agent.get_new_squad(player_feature_names, opponent_feature_names)
