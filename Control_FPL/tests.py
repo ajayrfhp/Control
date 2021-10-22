@@ -68,10 +68,9 @@ class TestAsync(unittest.IsolatedAsyncioTestCase):
         """Function tests that get_players works
         """
         player_feature_names = ["total_points", "ict_index", 'goals_scored', 'assists', 'clean_sheets', "goals_conceded", "saves"]
-        team_feature_names=["npxG", "npxGA"]
         num_players = 10
         for window in range(2, 10):
-            players = await get_players(player_feature_names, team_feature_names, window, num_players=num_players, visualize=False)
+            players = await get_players(player_feature_names, window, num_players=num_players, visualize=False)
             self.assertEqual(len(players), num_players)
             player = players[np.random.randint(num_players)]
             self.assertEqual(player.window, window)
@@ -82,22 +81,19 @@ class TestAsync(unittest.IsolatedAsyncioTestCase):
         """Function tests that get training datasets function works
         """
         player_feature_names = ["total_points", "ict_index", 'goals_scored', 'assists', 'clean_sheets', "goals_conceded", "saves"]
-        team_feature_names=["npxG", "npxGA"]
         num_players = 10
         for window in range(2, 10):
-            players = await get_players(player_feature_names, team_feature_names, window, num_players=num_players, visualize=False)
-            teams = get_teams(team_feature_names, window)
-            train_loader, test_loader, (means, stds) = get_training_datasets(players, teams, window)
+            players = await get_players(player_feature_names, window, num_players=num_players, visualize=False)
+            train_loader, test_loader, (means, stds) = get_training_datasets(players,  window)
             (next_inputs,) = next(iter(train_loader))
-            self.assertEqual(next_inputs.shape[1], len(player_feature_names) + len(team_feature_names))
+            self.assertEqual(next_inputs.shape[1], len(player_feature_names))
             self.assertEqual(next_inputs.shape[2], window)
 
     async def test_current_squad(self):
         """Function tests that get current squad function works
         """
         player_feature_names = ["total_points", "ict_index", 'goals_scored', 'assists', 'clean_sheets', "goals_conceded", "saves"]
-        team_feature_names=["npxG", "npxGA"]
-        current_squad_players, non_squad_players = await get_current_squad(player_feature_names, team_feature_names, window=4)
+        current_squad_players, non_squad_players = await get_current_squad(player_feature_names, window=4)
         useful_players = [player for player in current_squad_players if not player.is_useless]
         self.assertEqual(len(current_squad_players), 15)
         self.assertEqual(len(useful_players), 13)
@@ -105,14 +101,15 @@ class TestAsync(unittest.IsolatedAsyncioTestCase):
     async def test_update_train(self):
         """Function tests model train capability and trade capabilities
         """
-        opponent_feature_names = ["npxG","npxGA"]
         player_feature_names = ["total_points", "ict_index", "clean_sheets", "saves", "assists"]
-        agent = Agent(player_feature_names, opponent_feature_names, epochs=1)
+        agent = Agent(player_feature_names, epochs=1)
+        os.environ['GAMEWEEK'] = '8_2021'
         await agent.get_data()
+        
         await agent.update_model()
         self.assertTrue(os.path.exists(f"{agent.model_directory}latest.ckpt"))
 
-        current_squad, non_squad = await agent.get_new_squad(player_feature_names, opponent_feature_names)
+        current_squad, non_squad = await agent.get_new_squad(player_feature_names)
         self.assertEqual(len(current_squad), 15)
         count_useless = [player for player in current_squad if player.is_useless]
         self.assertEqual(len(count_useless), 2)
@@ -121,13 +118,13 @@ class TestAsync(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(best_11), 11)
 
     async def test_get_wildcard_squad(self):
-        opponent_feature_names = ["npxG","npxGA"]
         player_feature_names = ["total_points", "ict_index", "clean_sheets", "saves", "assists"]
-        agent = Agent(player_feature_names, opponent_feature_names, epochs=1)
+        agent = Agent(player_feature_names, epochs=1)
+        os.environ['GAMEWEEK'] = '8_2021'
         await agent.get_data()
         await agent.update_model()
 
-        current_squad, non_squad = await agent.get_new_squad(player_feature_names, opponent_feature_names)
+        current_squad, non_squad = await agent.get_new_squad(player_feature_names)
         best_15 = agent.get_wildcard_squad(current_squad + non_squad)
         self.assertEqual(len(best_15), 15)
 

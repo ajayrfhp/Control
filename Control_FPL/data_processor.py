@@ -62,14 +62,13 @@ def get_player_features(player_feature_names, max_player_points=12):
     return all_player_features
 
 
-async def get_players(player_feature_names, team_feature_names, window, visualize=False, num_players=600):
+async def get_players(player_feature_names, window, visualize=False, num_players=600):
     """Function builds up list of players.
        Retrieve latest player information, read in historical statistics of players and build up 
        player object for each player.
 
     Args:
         player_feature_names (list): list of player feature names
-        team_feature_names (list): list of team feature names
         window (int) : window size to use for contextual prediction
         visualize (bool, optional): visualize features. Defaults to False.
         num_players (int, optional): number of players to retrieve. Defaults to 10.
@@ -81,24 +80,15 @@ async def get_players(player_feature_names, team_feature_names, window, visualiz
     manual_injuries = []
     async with aiohttp.ClientSession() as session:
         fpl = FPL(session) 
-        teams = get_teams(team_feature_names, window)
         players = []
         all_player_features =  get_player_features(player_feature_names)
         for i in range(1, num_players+1):
             try:
                 player_data = await fpl.get_player(i)
                 name = player_data.first_name + " " + player_data.second_name
+                team = player_data.team
                 integer_position = player_data.element_type
                 latest_price = player_data.now_cost
-                team = await fpl.get_team(player_data.team)
-                fixtures = await team.get_fixtures(return_json=True)
-                latest_opponent = fixtures[0]["team_h"]
-                if fixtures[0]["team_h"] == player_data.team:
-                    latest_opponent = fixtures[0]["team_a"]
-                latest_opponent = await fpl.get_team(latest_opponent)
-                latest_opponent = normalized_team_names[normalized_team_names["name_2019"] == latest_opponent.name]["normalized_team_name"].values[0]
-                latest_opponent = [team for team in teams if team.name == latest_opponent][0]
-                
                 
                 chance_of_playing_this_round = 100
                 if player_data.chance_of_playing_this_round is not None:
@@ -107,16 +97,17 @@ async def get_players(player_feature_names, team_feature_names, window, visualiz
                     chance_of_playing_this_round = 0 
 
                 player_features = all_player_features[all_player_features["name"] == name].transpose().values[1:]
-                player = Player(id=i, name=name, integer_position=integer_position, team=team.name, 
-                                latest_price=latest_price, window=window, player_feature_names=player_feature_names, teams=teams,
-                                player_features=player_features[1:], latest_opponent=latest_opponent,opponents=player_features[:1][0],
+                player = Player(id=i, name=name, integer_position=integer_position,
+                                latest_price=latest_price, window=window, player_feature_names=player_feature_names,
+                                player_features=player_features[1:],team=team,
                                 chance_of_playing_this_round=chance_of_playing_this_round)
                 
                 if visualize:
                     player.visualize()
                 players.append(player)
-            except:
+            except ValueError:
                 continue
+        
         return players
 
 def get_team_features(team_name, team_feature_names=["npxGA"]):
@@ -203,12 +194,11 @@ def normalize(x, is_scalar=False):
         normalized_x = normalized_x.permute(0, 2, 1)
         return normalized_x, means, stds
 
-def get_training_datasets(players, teams, window_size=5, batch_size=500, num_workers=20):
+def get_training_datasets(players, window_size=5, batch_size=500, num_workers=20):
     """Function builds data loaders for contextual prediction
 
     Args:
         players (list[players]): List of players
-        teams (list[teams]): List of teams
         window_size (int, optional): max window size for contextual prediction. Defaults to 7.
         batch_size (int, optional): batch size for data loader. Defaults to 50.
         num_workers(int, optional) : number of cpus to use as workers. Defaults to 20
@@ -217,42 +207,26 @@ def get_training_datasets(players, teams, window_size=5, batch_size=500, num_wor
         train_loader, test_loader, (means, stds) (DataLoader, DataLoader, tuple): train, test data loaders and normalizers
     """
     X_players = []
-    X_opponents = []
     for player in players:
-        if player.opponents.shape[0]:
-            opponents = []
-            for i in range(player.player_features.shape[1] - window_size):
-                X_players.append(player.player_features[:,i:i+window_size])
-                opponents.append((i+window_size-1, player.opponents[i+window_size-1]))
-            for i, opponent in opponents:
-                for team in teams:
-                    if team.name == opponent:
-                        x_opponent = team.team_features[:,i-window_size+1:i+1]
-                        if x_opponent.shape[1] != window_size:
-                            x_opponent = np.zeros((x_opponent.shape[0], window_size))
-                        X_opponents.append(x_opponent)
-                        break
-
+        for i in range(player.player_features.shape[1] - window_size):
+            X_players.append(player.player_features[:,i:i+window_size])
     X_players = np.array(X_players).astype(float)
-    X_opponents = np.array(X_opponents).astype(float)
-    X = np.concatenate((X_players, X_opponents), axis = 1)
-    indices = np.random.permutation(range(len(X)))
-    train_length = int(0.8 * len(X))
-    X = torch.tensor(X).double()
+    indices = np.random.permutation(range(len(X_players)))
+    train_length = int(0.8 * len(X_players))
+    X_players = torch.tensor(X_players).double()
     if if_has_gpu_use_gpu():
-        X = X.cuda()
-    X, means, stds = normalize(X)
-    X_train, X_test = X[indices[:train_length]], X[indices[train_length:]] 
+        X_players = X_players.cuda()
+    X_players, means, stds = normalize(X_players)
+    X_train, X_test = X_players[indices[:train_length]], X_players[indices[train_length:]] 
     train_loader = DataLoader(TensorDataset(X_train,), batch_size=batch_size, num_workers=num_workers)
     test_loader = DataLoader(TensorDataset(X_test,), batch_size=batch_size, num_workers=num_workers)
     return train_loader, test_loader, (means, stds)
 
-async def get_current_squad(player_feature_names, team_feature_names, window, num_players=600):
+async def get_current_squad(player_feature_names, window, num_players=600):
     """function gets player lists for players in squad and out of squad
 
     Args:
         player_feature_names (list): names of player related features
-        team_feature_names (list): names of team related features
         window (int) : window size
         num_players (int) : number of players
 
@@ -260,7 +234,7 @@ async def get_current_squad(player_feature_names, team_feature_names, window, nu
         current_squad, non_squad(list, list): players in squad, players out of squad
     """
     current_squad_players, non_squad_players = [], []
-    players = await get_players(player_feature_names, team_feature_names, window, num_players=num_players)
+    players = await get_players(player_feature_names, window, num_players=num_players)
     async with aiohttp.ClientSession() as session:
         fpl = FPL(session)
         await fpl.login(email=email, password=password)

@@ -8,8 +8,7 @@ from models import if_has_gpu_use_gpu
 class Player:
     def __init__(self, id, name, integer_position, team, latest_price, 
                 player_feature_names=[], window=0, 
-                player_features=[], teams=[], latest_opponent=None,
-                opponents=[], chance_of_playing_this_round=100,
+                player_features=[], teams=[], chance_of_playing_this_round=100,
                 in_playing_11=False):
         self.id = id
         self.name = name
@@ -29,24 +28,16 @@ class Player:
         else:
             self.player_features = player_features
         self.in_current_squad = False
-        self.opponents = opponents
         self.latest_features = self.player_features[:,-self.window:].astype(float)
-        self.latest_opponent = latest_opponent
-        self.latest_opponent_feature = latest_opponent.team_features[:,-self.window:]
         self.predicted_performance = 0
         self.chance_of_playing_this_round = chance_of_playing_this_round
         self.in_playing_11 = in_playing_11
-        self.num_features = len(self.player_feature_names) + self.latest_opponent_feature.shape[0]
+        self.num_features = len(self.player_feature_names)
         self.is_useless = False
-        self.len_opponent_features = 2
 
     def visualize(self):
         plt.title(f"{self.name} {self.predicted_performance} {self.chance_of_playing_this_round}")
         sns.heatmap(self.latest_features, yticklabels=self.player_feature_names,  cmap = sns.light_palette("seagreen", as_cmap = True), vmin=0, vmax=10)
-        plt.show()
-
-        plt.title(self.latest_opponent.name)
-        sns.heatmap(self.latest_opponent_feature, yticklabels=self.latest_opponent.team_feature_names,  cmap = sns.light_palette("seagreen", as_cmap = True), vmin=0, vmax=10)
         plt.show()
 
     def predict_next_performance(self, model, normalizers):
@@ -54,12 +45,11 @@ class Player:
             self.predicted_performance = 0
             return
         (means, stds) = normalizers
-        if self.latest_opponent_feature.shape[1] != self.window:
-            self.latest_opponent_feature = np.zeros((self.len_opponent_features, self.window))
+
         if self.latest_features.shape[1] != self.window:
             self.latest_features = np.zeros((len(self.player_feature_names), self.window))
 
-        x = np.concatenate((self.latest_features, self.latest_opponent_feature), axis=0)
+        x = self.latest_features
         x = torch.tensor(x).reshape((1, self.num_features, self.window)).double()  # (1, D, L)
         x = x.permute(0, 2, 1) # (N, L, D)
         if if_has_gpu_use_gpu():

@@ -65,12 +65,10 @@ class RNNModel(nn.Module):
         return o.reshape((-1, ))
 
 class LightningWrapper(pl.LightningModule):
-    def __init__(self, window_size=4, num_features=7, use_opponent_features=True, len_opponent_features=2, model_type='linear'):
+    def __init__(self, window_size=4, num_features=7, model_type='linear'):
         super().__init__()
         self.window_size = window_size
         self.dim = window_size * num_features
-        self.use_opponent_features = use_opponent_features
-        self.len_opponent_features = len_opponent_features
         if model_type == 'linear':
             self.model = LinearModel(window_size, num_features)
         elif model_type == 'RNN':

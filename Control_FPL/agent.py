@@ -26,12 +26,9 @@ import knapsack
 import pytorch_lightning as pl
 
 class Agent:
-    def __init__(self, player_feature_names, opponent_feature_names, use_opponent_features=True, window=4, epochs=100, num_players=680):
+    def __init__(self, player_feature_names, window=4, epochs=100, num_players=680):
         self.player_feature_names = player_feature_names
-        self.opponent_feature_names = opponent_feature_names
-        self.model = LightningWrapper(window_size=window, num_features=len(player_feature_names) + len(opponent_feature_names), 
-                    use_opponent_features=use_opponent_features, 
-                    len_opponent_features=len(opponent_feature_names), 
+        self.model = LightningWrapper(window_size=window, num_features=len(player_feature_names),  
                     model_type='linear')
         if if_has_gpu_use_gpu():
             self.model = self.model.cuda()
@@ -44,17 +41,16 @@ class Agent:
         self.model_directory = './results/models/'
     
     async def get_data(self):
-        players = await get_players(self.player_feature_names, self.opponent_feature_names, window=self.window, visualize=False, num_players=self.num_players)
-        teams = get_teams(self.opponent_feature_names, window=self.window, visualize=False)
-        self.train_loader, self.test_loader, self.normalizers = get_training_datasets(players, teams)
+        players = await get_players(self.player_feature_names, window=self.window, visualize=False, num_players=self.num_players)
+        self.train_loader, self.test_loader, self.normalizers = get_training_datasets(players)
 
     async def update_model(self):
         self.trainer.fit(self.model, self.train_loader, self.test_loader)
         self.trainer.save_checkpoint(f"{self.model_directory}{os.environ['GAMEWEEK']}.ckpt")
         self.trainer.save_checkpoint(f"{self.model_directory}latest.ckpt")
 
-    async def get_new_squad(self, player_feature_names, team_feature_names):
-        current_squad, non_squad = await get_current_squad(player_feature_names, team_feature_names, window=self.window, num_players=self.num_players)
+    async def get_new_squad(self, player_feature_names):
+        current_squad, non_squad = await get_current_squad(player_feature_names, window=self.window, num_players=self.num_players)
         for player in current_squad + non_squad:
             player.predict_next_performance(self.model.model, self.normalizers)
         current_squad, non_squad = self.make_optimal_trade(current_squad, non_squad)
@@ -282,11 +278,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Get data, train agent and update FPL squad')
     parser.add_argument('--run_E2E_agent', type=str, default="True", help='Download latest data, train with latest available model, save model and store results')
     parser.add_argument('--update_model', type=str, default="False", help='Retrains model with latest data if set to true')
-    parser.add_argument('--update_squad', type=str, default="False", help='Run inference mode alone. Download latest data, get new squad')
+    parser.add_argument('--update_squad', type=str, default="False", help='Run inference mode. Download latest data, get new squad')
     parser.add_argument('--epochs', type=int, default=5, help='Number of epochs to train. Invalid option for inference mode')
     parser.add_argument('--player_feature_names', nargs='+', default=["total_points", "ict_index", "clean_sheets", "saves", "assists"], help='player feature names')
-    parser.add_argument('--opponent_feature_names',  nargs='+', default=["npxG","npxGA"], help='opponent feature names')
-    os.environ['GAMEWEEK'] = '7_2021'
+    os.environ['GAMEWEEK'] = '8_2021'
     args = parser.parse_args()
     
     
@@ -297,14 +292,14 @@ if __name__ == "__main__":
         os.system(f'cp agent.ipynb results/agent_{gameweek}.ipynb')
         os.system(f'jupyter nbconvert --to html results/agent_{gameweek}.ipynb')
     else:
-        agent = Agent(args.player_feature_names, args.opponent_feature_names, epochs=args.epochs)
+        agent = Agent(args.player_feature_names, epochs=args.epochs)
         asyncio.run(agent.get_data())
         if args.update_model == "True":
             print('retraining')
             asyncio.run(agent.update_model())
         elif args.update_squad == "True":
             asyncio.run(agent.load_latest_model())
-            new_squad, non_squad = asyncio.run(agent.get_new_squad(args.player_feature_names, args.opponent_feature_names))
+            new_squad, non_squad = asyncio.run(agent.get_new_squad(args.player_feature_names))
             agent.set_playing_11(new_squad)
             agent.show_top_performers(new_squad + non_squad, k=10)
         
