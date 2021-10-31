@@ -43,6 +43,7 @@ class PrevModel(nn.Module):
 class LinearModel(nn.Module):
     def __init__(self, window_size=4, num_features=5):
         super(LinearModel, self).__init__()
+        print(window_size, num_features)
         self.dim = window_size * num_features
         self.fc1 = nn.Linear(self.dim, 1).double()
     

@@ -39,6 +39,7 @@ class Agent:
         self.trainer = pl.Trainer(max_epochs=epochs)
         self.num_players = num_players
         self.model_directory = './results/models/'
+        os.environ['GAMEWEEK'] = '8_2021'
     
     async def get_data(self):
         players = await get_players(self.player_feature_names, window=self.window, visualize=False, num_players=self.num_players)
@@ -281,7 +282,7 @@ if __name__ == "__main__":
     parser.add_argument('--update_squad', type=str, default="False", help='Run inference mode. Download latest data, get new squad')
     parser.add_argument('--epochs', type=int, default=5, help='Number of epochs to train. Invalid option for inference mode')
     parser.add_argument('--player_feature_names', nargs='+', default=["total_points", "ict_index", "clean_sheets", "saves", "assists"], help='player feature names')
-    os.environ['GAMEWEEK'] = '8_2021'
+    
     args = parser.parse_args()
     
     
