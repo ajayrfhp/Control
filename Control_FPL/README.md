@@ -36,7 +36,7 @@ a
 ## Execute
 - `python agent.py --run_E2E_agent == True`
 
-### Additional links
+### Additional links for insallation
 - [Nvidia Documentation](https://docs.nvidia.com/cuda/wsl-user-guide/index.html)
 - [Setup CUDA pytorch on WSL](https://christianjmills.com/Using-PyTorch-with-CUDA-on-WSL2/)
 
@@ -44,3 +44,4 @@ a
 
 ## Resources
 - [Alan turing institute](https://github.com/alan-turing-institute/AIrsenal)
+- [Profiling with python](https://ymichael.com/2014/03/08/profiling-python-with-cprofile.html)

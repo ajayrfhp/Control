@@ -20,30 +20,29 @@ from torch.utils.data import TensorDataset, DataLoader
 from player import Player
 from team import Team
 from data_processor import get_fpl, get_current_squad, get_teams, get_players, get_training_datasets
-from models import LightningWrapper, if_has_gpu_use_gpu
+from models import LightningWrapper
 from key import *
 import knapsack
 import pytorch_lightning as pl
 
 class Agent:
     def __init__(self, player_feature_names, window=4, epochs=100, num_players=680):
+        os.environ['GAMEWEEK'] = '8_2021'
         self.player_feature_names = player_feature_names
         self.model = LightningWrapper(window_size=window, num_features=len(player_feature_names),  
                     model_type='linear')
-        if if_has_gpu_use_gpu():
-            self.model = self.model.cuda()
         self.players = None
         self.train_loader, self.test_loader, self.normalizers = None, None, None
         self.window = window
         self.epochs = epochs
-        self.trainer = pl.Trainer(max_epochs=epochs)
+        self.trainer = pl.Trainer(max_epochs=epochs, gpus=torch.cuda.device_count())
         self.num_players = num_players
         self.model_directory = './results/models/'
-        os.environ['GAMEWEEK'] = '8_2021'
+        
     
     async def get_data(self):
         players = await get_players(self.player_feature_names, window=self.window, visualize=False, num_players=self.num_players)
-        self.train_loader, self.test_loader, self.normalizers = get_training_datasets(players)
+        self.train_loader, self.test_loader, self.normalizers = get_training_datasets(players, batch_size=1000)
 
     async def update_model(self):
         self.trainer.fit(self.model, self.train_loader, self.test_loader)
@@ -58,9 +57,13 @@ class Agent:
         return current_squad, non_squad
     
     async def load_latest_model(self):
+        self.model = LightningWrapper(window_size=self.window, num_features=len(self.player_feature_names),  
+                    model_type='linear')
+        print(self.player_feature_names)
         if os.path.exists(f"{self.model_directory}{os.environ['GAMEWEEK']}.ckpt"):
             self.model.load_from_checkpoint(f"{self.model_directory}{os.environ['GAMEWEEK']}.ckpt")
         elif os.path.exists(f"{self.model_directory}latest.ckpt"):
+            print('b')
             self.model.load_from_checkpoint(f"{self.model_directory}latest.ckpt")
         else:
             await self.update_model()
@@ -282,7 +285,7 @@ if __name__ == "__main__":
     parser.add_argument('--update_squad', type=str, default="False", help='Run inference mode. Download latest data, get new squad')
     parser.add_argument('--epochs', type=int, default=5, help='Number of epochs to train. Invalid option for inference mode')
     parser.add_argument('--player_feature_names', nargs='+', default=["total_points", "ict_index", "clean_sheets", "saves", "assists"], help='player feature names')
-    
+    os.environ['GAMEWEEK'] = '8_2021'
     args = parser.parse_args()
     
     
@@ -298,7 +301,7 @@ if __name__ == "__main__":
         if args.update_model == "True":
             print('retraining')
             asyncio.run(agent.update_model())
-        elif args.update_squad == "True":
+        if args.update_squad == "True":
             asyncio.run(agent.load_latest_model())
             new_squad, non_squad = asyncio.run(agent.get_new_squad(args.player_feature_names))
             agent.set_playing_11(new_squad)

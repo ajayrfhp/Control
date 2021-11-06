@@ -15,7 +15,6 @@ from torch.utils.data import TensorDataset, DataLoader
 from player import Player
 from team import Team
 from key import *
-from models import if_has_gpu_use_gpu
 
 
 def get_normalized_team_names():
@@ -214,8 +213,6 @@ def get_training_datasets(players, window_size=5, batch_size=500, num_workers=20
     indices = np.random.permutation(range(len(X_players)))
     train_length = int(0.8 * len(X_players))
     X_players = torch.tensor(X_players).double()
-    if if_has_gpu_use_gpu():
-        X_players = X_players.cuda()
     X_players, means, stds = normalize(X_players)
     X_train, X_test = X_players[indices[:train_length]], X_players[indices[train_length:]] 
     train_loader = DataLoader(TensorDataset(X_train,), batch_size=batch_size, num_workers=num_workers)

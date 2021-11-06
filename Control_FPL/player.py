@@ -3,7 +3,6 @@ import json
 import seaborn as sns
 from matplotlib import pyplot as plt
 import torch
-from models import if_has_gpu_use_gpu
 
 class Player:
     def __init__(self, id, name, integer_position, team, latest_price, 
@@ -52,8 +51,6 @@ class Player:
         x = self.latest_features
         x = torch.tensor(x).reshape((1, self.num_features, self.window)).double()  # (1, D, L)
         x = x.permute(0, 2, 1) # (N, L, D)
-        if if_has_gpu_use_gpu():
-            x = x.cuda()
         normalized_x = (x - means) / (stds) # (N, L, D)
         normalized_x = normalized_x.permute(0, 2, 1) # (N, D, L)
 

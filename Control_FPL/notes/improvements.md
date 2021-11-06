@@ -248,11 +248,53 @@
 - Code refactoring
   - Speed up shit
     - Make GPU work in windows
-    - Use Getplayers instead of using 680 get player
+    - Use one call to Getplayers instead of using 680 get player calls.
     - How much can we speed up code by ignoring opponent data.
   - Persist model and results
     - Store results(current squad, trades, new squad, top performers) for every week in results directory using jupyter notebook. Call jupyter notebook execution from agent.py
     - Persist model.
+- Better features
+  - Use home/away feature
+- Bayesian linear model
+  - Predict player scores with uncertainity
+- Better bin packing
+  - 3d knapsack
+- Better pipeline
+  - Automatically figure out game week id
+  - Figure out injuries
+    - Use NLP to get injury information from twitter - Siddarth's idea
+    - Use average number of minutes played in last 3 games as proxy for amount of time played.
+  - Transfer should be automatic 
+  - Can we use orchestration engine to automate download and model training ?
+
+# 30 Oct 19:11
+- Code refactoring
+  - Speed up shit
+    - Use one call to Getplayers instead of using 680 get player calls.
+    - Ignore opponent data
+  - Persist model and results
+    - Store results(current squad, trades, new squad, top performers) for every week in results directory using jupyter notebook. Call jupyter notebook execution from agent.py
+    - Persist model.
+- Better features
+  - Use home/away feature
+- Bayesian linear model
+  - Predict player scores with uncertainity
+- Better bin packing
+  - 3d knapsack
+- Better pipeline
+  - Automatically figure out game week id
+  - Figure out injuries
+    - Use NLP to get injury information from twitter - Siddarth's idea
+    - Use average number of minutes played in last 3 games as proxy for amount of time played.
+  - Transfer should be automatic 
+  - Can we use orchestration engine to automate download and model training ?
+
+# 06 November 10:17
+- Code refactoring
+  - Speed up shit
+    - Make parallel double trade is the slowest function taking 120 seconds out of the 145 seconds it takes to execute. Look into making it faster. 
+- Better features
+  - Use home/away feature
 - Bayesian linear model
   - Predict player scores with uncertainity
 - Better bin packing

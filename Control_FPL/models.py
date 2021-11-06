@@ -2,14 +2,6 @@ import torch
 import torch.nn as nn
 import pytorch_lightning as pl
 
-def if_has_gpu_use_gpu():
-    if torch.cuda.device_count() >= 1:
-        torch.set_default_tensor_type(torch.cuda.DoubleTensor)
-        return True
-    else:
-        torch.set_default_tensor_type(torch.DoubleTensor)
-        return False
-
 class AvgModel(nn.Module):
     def __init__(self):
         pass
@@ -43,7 +35,6 @@ class PrevModel(nn.Module):
 class LinearModel(nn.Module):
     def __init__(self, window_size=4, num_features=5):
         super(LinearModel, self).__init__()
-        print(window_size, num_features)
         self.dim = window_size * num_features
         self.fc1 = nn.Linear(self.dim, 1).double()
     
@@ -66,7 +57,7 @@ class RNNModel(nn.Module):
         return o.reshape((-1, ))
 
 class LightningWrapper(pl.LightningModule):
-    def __init__(self, window_size=4, num_features=7, model_type='linear'):
+    def __init__(self, window_size=4, num_features=5, model_type='linear'):
         super().__init__()
         self.window_size = window_size
         self.dim = window_size * num_features
