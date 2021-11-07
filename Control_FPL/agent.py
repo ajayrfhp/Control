@@ -27,7 +27,7 @@ import pytorch_lightning as pl
 
 class Agent:
     def __init__(self, player_feature_names, window=4, epochs=100, num_players=680):
-        os.environ['GAMEWEEK'] = '8_2021'
+        os.environ['GAMEWEEK'] = '11_2021'
         self.player_feature_names = player_feature_names
         self.model = LightningWrapper(window_size=window, num_features=len(player_feature_names),  
                     model_type='linear')
@@ -59,11 +59,9 @@ class Agent:
     async def load_latest_model(self):
         self.model = LightningWrapper(window_size=self.window, num_features=len(self.player_feature_names),  
                     model_type='linear')
-        print(self.player_feature_names)
         if os.path.exists(f"{self.model_directory}{os.environ['GAMEWEEK']}.ckpt"):
             self.model.load_from_checkpoint(f"{self.model_directory}{os.environ['GAMEWEEK']}.ckpt")
         elif os.path.exists(f"{self.model_directory}latest.ckpt"):
-            print('b')
             self.model.load_from_checkpoint(f"{self.model_directory}latest.ckpt")
         else:
             await self.update_model()
@@ -120,6 +118,10 @@ class Agent:
             optimal_trades = []
             optimal_trades_gain = 0
             players_in_same_team = defaultdict(int)
+            players_by_position = defaultdict(list)
+            for player in non_squad:
+                players_by_position[player.position].append(player)
+
             for player in current_squad:
                 players_in_same_team[player.team] += 1
             for player_out1 in current_squad:
@@ -127,8 +129,8 @@ class Agent:
                 for player_out2 in current_squad:
                     players_in_same_team[player_out2.team] -= 1
                     if not player_out1.is_useless and not player_out2.is_useless:
-                        for player_in1 in non_squad:
-                            for player_in2 in non_squad:
+                        for player_in1 in players_by_position[player_out1.position]:
+                            for player_in2 in players_by_position[player_out2.position]:
                                 trades_gain = 0
                                 different_players = player_out1.name != player_out2.name and player_in1.name != player_in2.name 
                                 player_in_positions = set((player_in1.position, player_in2.position))
@@ -283,9 +285,9 @@ if __name__ == "__main__":
     parser.add_argument('--run_E2E_agent', type=str, default="True", help='Download latest data, train with latest available model, save model and store results')
     parser.add_argument('--update_model', type=str, default="False", help='Retrains model with latest data if set to true')
     parser.add_argument('--update_squad', type=str, default="False", help='Run inference mode. Download latest data, get new squad')
-    parser.add_argument('--epochs', type=int, default=5, help='Number of epochs to train. Invalid option for inference mode')
+    parser.add_argument('--epochs', type=int, default=100, help='Number of epochs to train. Invalid option for inference mode')
     parser.add_argument('--player_feature_names', nargs='+', default=["total_points", "ict_index", "clean_sheets", "saves", "assists"], help='player feature names')
-    os.environ['GAMEWEEK'] = '8_2021'
+    os.environ['GAMEWEEK'] = '11_2021'
     args = parser.parse_args()
     
     

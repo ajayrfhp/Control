@@ -80,12 +80,12 @@ class LightningWrapper(pl.LightningModule):
         outputs = x[:,0,self.window_size]
         predictions = self.model.forward(inputs)
         loss = nn.MSELoss()(predictions, outputs)
-        self.log(f'{self.model_type} = train_loss', loss)
+        self.log(f'{self.model_type} {self.dim} = train_loss', loss)
         return loss 
 
     def validation_step(self, batch, batch_idx):
         loss = self.training_step(batch, batch_idx)
-        self.log(f'{self.model_type} = val_loss', loss)
+        self.log(f'{self.model_type} {self.dim}= val_loss', loss)
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
