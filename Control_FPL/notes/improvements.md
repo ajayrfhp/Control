@@ -306,3 +306,18 @@
     - Use average number of minutes played in last 3 games as proxy for amount of time played.
   - Transfer should be automatic 
   - Can we use orchestration engine to automate download and model training ?
+
+# 07 November 21:58
+- Code refactoring
+  - Make parallel double trade run faster. Currently takes 120 seconds. 
+- Bayesian linear model
+  - Predict player scores with uncertainity
+- Better bin packing
+  - 3d knapsack
+- Better pipeline
+  - Automatically figure out game week id
+  - Figure out injuries
+    - Use NLP to get injury information from twitter - Siddarth's idea
+    - Use average number of minutes played in last 3 games as proxy for amount of time played.
+  - Transfer should be automatic 
+  - Can we use orchestration engine to automate download and model training ?
