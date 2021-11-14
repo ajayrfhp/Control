@@ -2,13 +2,23 @@ from collections import defaultdict
 import numpy as np
 import unittest
 import os
-import pickle
+import random
 from agent import Agent
 from data_processor import get_player_features, get_team_features, get_teams, get_players, get_training_datasets, get_current_squad
 from model_utils import pearson_correlation
 import knapsack
 import asyncio
 import torch
+from player import Player
+from agent import Agent
+
+def get_empty_player(name, integer_position, predicted_performance, team, latest_price=2, num_features=5, window=4, num_transfers_available=1, bank=0, is_useless=False):
+            random_id = random.getrandbits(128)
+            player = Player(name=name, integer_position=integer_position, id=random_id, player_features=np.zeros((num_features, window)), latest_price=latest_price, team=team, predicted_peformance=predicted_performance)
+            player.num_transfers_available=num_transfers_available
+            player.bank =bank
+            player.is_useless = is_useless
+            return player
 
 class TestDataProcessor(unittest.TestCase):
     def test_get_player_features(self):
@@ -102,8 +112,8 @@ class TestAsync(unittest.IsolatedAsyncioTestCase):
         """Function tests model train capability and trade capabilities
         """
         player_feature_names = ["total_points", "ict_index", "clean_sheets", "saves", "assists"]
-        agent = Agent(player_feature_names, epochs=1)
-        os.environ['GAMEWEEK'] = '8_2021'
+        agent = Agent(player_feature_names, epochs=20)
+        os.environ['GAMEWEEK'] = '11_2021'
         await agent.get_data()
         
         await agent.update_model()
@@ -116,6 +126,51 @@ class TestAsync(unittest.IsolatedAsyncioTestCase):
 
         best_11 = agent.set_playing_11(current_squad)
         self.assertEqual(len(best_11), 11)
+
+
+    async def test_trade(self):
+        player_feature_names = ["total_points", "ict_index", "clean_sheets", "saves", "assists"]
+        agent = Agent(player_feature_names, epochs=1)
+        current_squad = [ get_empty_player('Player1', 1, 5, 'TeamA'),
+                          get_empty_player('Player2', 1, 3, 'TeamA'),
+                          get_empty_player('Player3', 1, 0.1, 'TeamA')]
+        non_squad = [get_empty_player('Player4', 1, 6, 'TeamA'), get_empty_player('Player5', 1, 0.2, 'TeamA')]
+        
+        
+        trade, trade_gain = agent.get_optimal_single_trade(current_squad, non_squad)
+        self.assertAlmostEqual(trade_gain, 5.9)
+        self.assertEqual(trade[0].name, 'Player3')
+        self.assertEqual(trade[1].name, 'Player4')
+
+        # Test that no more than 3 players from same team are selected
+        current_squad = [ get_empty_player('Player1', 1, 5, 'TeamA'),
+                          get_empty_player('Player2', 1, 3, 'TeamA'),
+                          get_empty_player('Player3', 1, 0.1, 'TeamA'),
+                          get_empty_player('Player4', 1, 6, 'TeamB'),
+                          get_empty_player('Player5', 1, 6, 'TeamB'),
+                          get_empty_player('Player6', 1, 6, 'TeamB')]
+
+        non_squad = [get_empty_player('Player7', 1, 6, 'TeamB'), get_empty_player('Player8', 1, 0.2, 'TeamA')]
+        trade, trade_gain = agent.get_optimal_single_trade(current_squad, non_squad)
+        self.assertAlmostEqual(trade_gain, 0.1) # Swap(Player3, Player7) should not be allowed since we have 3 other players from team B
+        self.assertEqual(trade[0].name, 'Player3')
+        self.assertEqual(trade[1].name, 'Player8')
+
+        # Test that double sequential trade works alright
+        current_squad = [ get_empty_player('Player1', 1, 5, 'TeamA'),
+                          get_empty_player('Player2', 1, 3, 'TeamA'),
+                          get_empty_player('Player3', 1, 0.1, 'TeamA'),
+                          get_empty_player('Player4', 1, 6, 'TeamB'),
+                          get_empty_player('Player5', 1, 6.1, 'TeamB'),
+                          get_empty_player('Player6', 1, 6.2, 'TeamB')]
+
+        non_squad = [get_empty_player('Player7', 1, 6, 'TeamA'), get_empty_player('Player8', 1, 2.5, 'TeamA'), get_empty_player('Player9', 1, 11, 'TeamB')]
+        trades = agent.get_optimal_sequential_double_trade(current_squad, non_squad)
+        players_out = set({trades["trades"][0][0].name, trades["trades"][1][0].name})
+        players_in = set({trades["trades"][0][1].name, trades["trades"][1][1].name})
+        self.assertAlmostEqual(trades["trades_gain"],10.9)
+        self.assertEqual(players_out, set({"Player3", "Player4"}))
+        self.assertEqual(players_in, set({"Player7", "Player9"}))
 
     async def test_get_wildcard_squad(self):
         player_feature_names = ["total_points", "ict_index", "clean_sheets", "saves", "assists"]

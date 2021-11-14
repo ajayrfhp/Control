@@ -8,7 +8,7 @@ class Player:
     def __init__(self, id, name, integer_position, team, latest_price, 
                 player_feature_names=[], window=0, 
                 player_features=[], teams=[], chance_of_playing_this_round=100,
-                in_playing_11=False):
+                in_playing_11=False, predicted_peformance=0):
         self.id = id
         self.name = name
         self.position_map = {
@@ -28,7 +28,7 @@ class Player:
             self.player_features = player_features
         self.in_current_squad = False
         self.latest_features = self.player_features[:,-self.window:].astype(float)
-        self.predicted_performance = 0
+        self.predicted_performance = predicted_peformance
         self.chance_of_playing_this_round = chance_of_playing_this_round
         self.in_playing_11 = in_playing_11
         self.num_features = len(self.player_feature_names)

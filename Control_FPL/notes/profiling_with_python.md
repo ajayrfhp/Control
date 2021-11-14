@@ -26,4 +26,4 @@
     - `Numba` compiles pythjon on the fly. 100% python, numba decorator compiles functions using LLVM. LLVM installation is required. Numpy for math. After first execution of function, instructions are compiled, further executions are blazing fast. Numba will inspect function types and build compiled code. 
     - No python objects will be involved. 
     - `Cython` compile code to c and run quick. 
-- [Fun stuff](https://adventofcode.com/)
+- [Fun stuff ADvent Of Code](https://adventofcode.com/)

@@ -55,7 +55,7 @@ def get_player_features(player_feature_names, max_player_points=12):
 
     game_weeks = pd.concat((gameweek_data_2019, gameweek_data_2020, game_week_data_2021))
     game_weeks["opponent"] = game_weeks["normalized_team_name"]
-    all_player_features = game_weeks[["name", "opponent"] + player_feature_names]
+    all_player_features = game_weeks[["name", "opponent", "minutes"] + player_feature_names]
     all_player_features.fillna(0, inplace=True)
     all_player_features["total_points"] = all_player_features["total_points"].clip(0, max_player_points)
     return all_player_features
@@ -76,7 +76,6 @@ async def get_players(player_feature_names, window, visualize=False, num_players
         players (list): list of player objects
     """
     normalized_team_names = get_normalized_team_names()
-    manual_injuries = []
     async with aiohttp.ClientSession() as session:
         fpl = FPL(session) 
         players = []
@@ -89,18 +88,20 @@ async def get_players(player_feature_names, window, visualize=False, num_players
                 integer_position = player_data.element_type
                 latest_price = player_data.now_cost
                 
+                player_features = all_player_features[all_player_features["name"] == name].transpose().values[2:]
+
+                avg_minutes_played = player_features[0, -3:].mean()
+
                 chance_of_playing_this_round = 100
                 if player_data.chance_of_playing_this_round is not None:
                     chance_of_playing_this_round = player_data.chance_of_playing_this_round
-                if name in manual_injuries:
-                    chance_of_playing_this_round = 0 
+                if avg_minutes_played <= 60:
+                    chance_of_playing_this_round = 0
 
-                player_features = all_player_features[all_player_features["name"] == name].transpose().values[1:]
                 player = Player(id=i, name=name, integer_position=integer_position,
                                 latest_price=latest_price, window=window, player_feature_names=player_feature_names,
                                 player_features=player_features[1:],team=team,
                                 chance_of_playing_this_round=chance_of_playing_this_round)
-                
                 if visualize:
                     player.visualize()
                 players.append(player)

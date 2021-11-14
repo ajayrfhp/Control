@@ -81,3 +81,4 @@
         ```
         
 
+- `get_optimal_double_trade` takes 6 seconds to run now.

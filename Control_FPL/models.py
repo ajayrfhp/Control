@@ -78,6 +78,7 @@ class LightningWrapper(pl.LightningModule):
         x = batch[0]
         inputs = x[:,:,:self.window_size]
         outputs = x[:,0,self.window_size]
+        print(inputs.shape)
         predictions = self.model.forward(inputs)
         loss = nn.MSELoss()(predictions, outputs)
         self.log(f'{self.model_type} {self.dim} = train_loss', loss)

@@ -25,12 +25,14 @@ from key import *
 import knapsack
 import pytorch_lightning as pl
 
+
 class Agent:
-    def __init__(self, player_feature_names, window=4, epochs=100, num_players=680):
-        os.environ['GAMEWEEK'] = '11_2021'
+    def __init__(self, player_feature_names, window=4, epochs=50, num_players=680):
+        os.environ['GAMEWEEK'] = '12_2021'
         self.player_feature_names = player_feature_names
         self.model = LightningWrapper(window_size=window, num_features=len(player_feature_names),  
                     model_type='linear')
+        print(self.model)
         self.players = None
         self.train_loader, self.test_loader, self.normalizers = None, None, None
         self.window = window
@@ -42,7 +44,7 @@ class Agent:
     
     async def get_data(self):
         players = await get_players(self.player_feature_names, window=self.window, visualize=False, num_players=self.num_players)
-        self.train_loader, self.test_loader, self.normalizers = get_training_datasets(players, batch_size=1000)
+        self.train_loader, self.test_loader, self.normalizers = get_training_datasets(players, batch_size=2000)
 
     async def update_model(self):
         self.trainer.fit(self.model, self.train_loader, self.test_loader)
@@ -57,33 +59,35 @@ class Agent:
         return current_squad, non_squad
     
     async def load_latest_model(self):
-        self.model = LightningWrapper(window_size=self.window, num_features=len(self.player_feature_names),  
-                    model_type='linear')
         if os.path.exists(f"{self.model_directory}{os.environ['GAMEWEEK']}.ckpt"):
-            self.model.load_from_checkpoint(f"{self.model_directory}{os.environ['GAMEWEEK']}.ckpt")
+            self.model = LightningWrapper.load_from_checkpoint(f"{self.model_directory}{os.environ['GAMEWEEK']}.ckpt", window_size=self.window, num_features=len(self.player_feature_names))
         elif os.path.exists(f"{self.model_directory}latest.ckpt"):
-            self.model.load_from_checkpoint(f"{self.model_directory}latest.ckpt")
+            self.model = LightningWrapper.load_from_checkpoint(f"{self.model_directory}latest.ckpt", window_size=self.window, num_features=len(self.player_feature_names))
         else:
             await self.update_model()
 
-    def make_optimal_trade(self, current_squad, non_squad):
-        '''
-            For each player in squad, 
-            find best performing player that can be bought under budget and estimate gain from doing trade. 
-            Among all player trades that can be done, identify trade with highest gain. 
-
-            Function considers trade for only 13 players. 
-        '''
-        def get_optimal_single_trade(current_squad, non_squad,  traded = []):
+    def get_optimal_single_trade(self, current_squad, non_squad,  traded = []):
             players_in_same_team = defaultdict(int)
             for player in current_squad:
                 players_in_same_team[player.team] += 1
             
+            most_valuable_players_under_cost = defaultdict(list)
+            for player1 in non_squad:
+                position_key = (player1.position, player1.latest_price)
+                most_valuable_players_under_cost[position_key].append(player1)
+                most_valuable_players_under_cost[position_key] = sorted(most_valuable_players_under_cost[position_key], key=lambda x:x.predicted_performance, reverse=True)
+                most_valuable_players_under_cost[position_key] = most_valuable_players_under_cost[position_key][0:3]
+
             optimal_trade_gain, optimal_trade = 0, None
             for player_out in current_squad:
                 players_in_same_team[player_out.team] -= 1
                 if not player_out.is_useless:
-                    for player_in in non_squad:
+                    candidate_swaps = []
+                    start_cost = player_out.latest_price + player_out.bank
+                    for cost in range(start_cost, start_cost-15, -1):
+                        position_key = (player_out.position, start_cost)
+                        candidate_swaps.extend(most_valuable_players_under_cost[position_key])
+                    for player_in in candidate_swaps:
                         if len(traded) >= 1:
                             if player_out == traded[0][0] or player_in == traded[0][1]:
                                 continue
@@ -95,7 +99,7 @@ class Agent:
                 players_in_same_team[player_out.team] += 1
             return optimal_trade, optimal_trade_gain
 
-        def get_optimal_sequential_double_trade(current_squad, non_squad, num_trades=2):
+    def get_optimal_sequential_double_trade(self, current_squad, non_squad, num_trades=2):
             '''
                 Swap 2 players one by one.
             '''
@@ -103,18 +107,36 @@ class Agent:
             optimal_trades_gain = 0
             traded = []
             for _ in range(num_trades):
-                optimal_trade, optimal_trade_gain = get_optimal_single_trade(current_squad, non_squad, traded)
+                optimal_trade, optimal_trade_gain = self.get_optimal_single_trade(current_squad, non_squad, traded)
                 optimal_trades.append(optimal_trade)
                 optimal_trades_gain += optimal_trade_gain
                 traded.append(optimal_trade)
             trade_info =  { "trades" : optimal_trades,
                             "trades_gain" : optimal_trades_gain}
             return trade_info
-        
+
+    def make_optimal_trade(self, current_squad, non_squad):
+        '''
+            For each player in squad, 
+            find best performing player that can be bought under budget and estimate gain from doing trade. 
+            Among all player trades that can be done, identify trade with highest gain. 
+
+            Function considers trade for only 13 players. 
+        '''
         def get_optimal_parallel_double_trade(current_squad, non_squad):
             '''
                 Swap 2 players at once, potentially gives room to sign higher budget players
             '''
+            most_valuable_players_under_cost = defaultdict(list)
+            for player1 in non_squad:
+                for player2 in non_squad:
+                    if player1.name != player2.name:
+                        cost = player1.latest_price + player2.latest_price 
+                        position_key = (player1.position, player2.position, cost)
+                        most_valuable_players_under_cost[position_key].append((player1, player2))
+                        most_valuable_players_under_cost[position_key] = sorted(most_valuable_players_under_cost[position_key], key=lambda x:x[0].predicted_performance+x[1].predicted_performance, reverse=True)
+                        most_valuable_players_under_cost[position_key] = most_valuable_players_under_cost[position_key][0:3]
+
             optimal_trades = []
             optimal_trades_gain = 0
             players_in_same_team = defaultdict(int)
@@ -124,44 +146,43 @@ class Agent:
 
             for player in current_squad:
                 players_in_same_team[player.team] += 1
+            
             for player_out1 in current_squad:
                 players_in_same_team[player_out1.team] -= 1
                 for player_out2 in current_squad:
                     players_in_same_team[player_out2.team] -= 1
-                    if not player_out1.is_useless and not player_out2.is_useless:
-                        for player_in1 in players_by_position[player_out1.position]:
-                            for player_in2 in players_by_position[player_out2.position]:
-                                trades_gain = 0
-                                different_players = player_out1.name != player_out2.name and player_in1.name != player_in2.name 
-                                player_in_positions = set((player_in1.position, player_in2.position))
-                                player_out_positions = set((player_out1.position, player_out2.position))
-                                same_positions = player_in_positions == player_out_positions
-                                selling_price = player_out1.latest_price + player_out2.latest_price 
-                                buying_price = player_in1.latest_price + player_in2.latest_price
-                                within_budget = selling_price + player_out2.bank >= buying_price
-                                different_teams = players_in_same_team[player_in1.team] <= 2 and players_in_same_team[player_in2.team] <= 2
-                                if different_players and same_positions and within_budget and different_teams:
-                                    trades_gain += (player_in1.predicted_performance + player_in2.predicted_performance) 
-                                    trades_gain -= (player_out1.predicted_performance + player_out2.predicted_performance)
-                                    if trades_gain > optimal_trades_gain:
-                                        optimal_trades_gain = trades_gain
-                                        optimal_trades = [(player_out1, player_in1), 
-                                                        (player_out2, player_in2)]
+                    if player_out1.name != player_out2.name and not player_out1.is_useless and not player_out2.is_useless:
+                        candidate_swaps = []
+                        start_cost = player_out1.latest_price + player_out2.latest_price + player_out1.bank
+                        for cost in range(start_cost, start_cost-15, -1):
+                            position_key = (player_out1.position, player_out2.position, cost)
+                            candidate_swaps.extend(most_valuable_players_under_cost[position_key])
+                        
+                        for (player_in1, player_in2) in candidate_swaps:
+                            trades_gain = (player_in1.predicted_performance + player_in2.predicted_performance) - (player_out1.predicted_performance + player_out2.predicted_performance)
+                            different_teams = players_in_same_team[player_in1.team] <= 2 and players_in_same_team[player_in2.team] <= 2
+                            within_budget = player_out1.latest_price + player_out2.latest_price + player_out1.bank >= player_in1.latest_price + player_in2.latest_price
+                            if trades_gain >= optimal_trades_gain and different_teams and within_budget:
+                                optimal_trades_gain = trades_gain
+                                optimal_trades = [(player_out1, player_in1), (player_out2, player_in2)]
                     players_in_same_team[player_out2.team] += 1
-                players_in_same_team[player_out1.team] += 1
+                players_in_same_team[player_out1.team] -= 1
+
             trade_info =  { "trades" : optimal_trades,
                             "trades_gain" : optimal_trades_gain}
             return trade_info
         
+        
+
         num_transfers_avalable = current_squad[0].num_transfers_available
-        optimal_sequential_double_trade = get_optimal_sequential_double_trade(current_squad, non_squad)
+        optimal_sequential_double_trade = self.get_optimal_sequential_double_trade(current_squad, non_squad)
         optimal_parallel_double_trade = get_optimal_parallel_double_trade(current_squad, non_squad)
         to_hold_for_double = optimal_parallel_double_trade["trades_gain"] > optimal_sequential_double_trade["trades_gain"]
         optimal_trade, num_trades = None, 0
         if to_hold_for_double:
             optimal_trade, num_trades = optimal_parallel_double_trade, 2
         else:
-            optimal_single_trade = get_optimal_sequential_double_trade(current_squad, non_squad, num_trades=num_transfers_avalable)
+            optimal_single_trade = self.get_optimal_sequential_double_trade(current_squad, non_squad, num_trades=num_transfers_avalable)
             optimal_trade, num_trades = optimal_single_trade, num_transfers_avalable
 
         for (player_out, player_in) in optimal_trade["trades"][:num_trades]:
@@ -169,26 +190,16 @@ class Agent:
                 current_squad = [player for player in current_squad if player.name != player_out.name] + [player_in]
                 non_squad = [player for player in non_squad if player.name != player_in.name] + [player_out]
             
-            print(f"Player out {player_out.name}. To double trade  = {to_hold_for_double} ")
+            print(f"Player out {player_out.name}. {player_out.predicted_performance} To double trade  = {to_hold_for_double} ")
             player_out.visualize()
-            print(f"Player in {player_in.name}. To double trade  = {to_hold_for_double} ")
+            print(f"Player in {player_in.name}. {player_in.predicted_performance} To double trade  = {to_hold_for_double} ")
             player_in.visualize()
                 
         
         return current_squad, non_squad
 
     def set_playing_11(self, current_squad, visualize=False):
-        acceptable_formations = [ {"Goalkeeper" : 1, "Defender" : 3, "Midfielder" : 4, "Forward" : 3},
-                                  {"Goalkeeper" : 1, "Defender" : 3, "Midfielder" : 5, "Forward" : 2},
-                                  {"Goalkeeper" : 1, "Defender" : 4, "Midfielder" : 3, "Forward" : 3},
-                                  {"Goalkeeper" : 1, "Defender" : 4, "Midfielder" : 4, "Forward" : 2},
-                                  {"Goalkeeper" : 1, "Defender" : 5, "Midfielder" : 3, "Forward" : 2},
-                                  {"Goalkeeper" : 1, "Defender" : 5, "Midfielder" : 4, "Forward" : 1},
-                                  {"Goalkeeper" : 1, "Defender" : 5, "Midfielder" : 2, "Forward" : 3},
-                                  {"Goalkeeper" : 1, "Defender" : 3, "Midfielder" : 4, "Forward" : 3}]
-        
         players_by_position = defaultdict(list)
-
         for player in current_squad:
             print(player.name)
             players_by_position[player.position].append(player)
@@ -198,8 +209,9 @@ class Agent:
         
         best_points = -np.inf 
         best_11 = []
-
-        for formation in acceptable_formations:
+        acceptable_formations = [(1, 3, 4, 3), (1, 3, 5, 2), (1, 4, 3, 3), (1, 5, 3, 2), (1, 5, 4, 1), (1, 5, 2, 3), (1, 3, 4, 3)]
+        for (num_gks, num_d, num_m, num_f) in acceptable_formations:
+            formation = { "Goalkeeper" : num_gks, "Defender" : num_d, "Midfielder" : num_m, "Forward" : num_f}
             this_11 = []
             this_points = 0
             for position, num_players_in_position in formation.items():
@@ -285,9 +297,9 @@ if __name__ == "__main__":
     parser.add_argument('--run_E2E_agent', type=str, default="True", help='Download latest data, train with latest available model, save model and store results')
     parser.add_argument('--update_model', type=str, default="False", help='Retrains model with latest data if set to true')
     parser.add_argument('--update_squad', type=str, default="False", help='Run inference mode. Download latest data, get new squad')
-    parser.add_argument('--epochs', type=int, default=100, help='Number of epochs to train. Invalid option for inference mode')
+    parser.add_argument('--epochs', type=int, default=30, help='Number of epochs to train. Invalid option for inference mode')
     parser.add_argument('--player_feature_names', nargs='+', default=["total_points", "ict_index", "clean_sheets", "saves", "assists"], help='player feature names')
-    os.environ['GAMEWEEK'] = '11_2021'
+    os.environ['GAMEWEEK'] = '12_2021'
     args = parser.parse_args()
     
     
