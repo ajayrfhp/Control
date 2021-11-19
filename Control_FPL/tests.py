@@ -131,6 +131,7 @@ class TestAsync(unittest.IsolatedAsyncioTestCase):
     async def test_trade(self):
         player_feature_names = ["total_points", "ict_index", "clean_sheets", "saves", "assists"]
         agent = Agent(player_feature_names, epochs=1)
+
         current_squad = [ get_empty_player('Player1', 1, 5, 'TeamA'),
                           get_empty_player('Player2', 1, 3, 'TeamA'),
                           get_empty_player('Player3', 1, 0.1, 'TeamA')]
@@ -156,6 +157,35 @@ class TestAsync(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(trade[0].name, 'Player3')
         self.assertEqual(trade[1].name, 'Player8')
 
+        # Test for 15 players, test that useless players are not swapped and that all positions are considered
+        current_squad = [ get_empty_player('Player1', 1, 4, 'TeamA'),
+                          get_empty_player('Player2', 1, 0.2, 'TeamB', is_useless=True),
+                          get_empty_player('Player3', 2, 5, 'TeamC'),
+                          get_empty_player('Player4', 2, 4, 'TeamD'),
+                          get_empty_player('Player5', 2, 3, 'TeamE'),
+                          get_empty_player('Player6', 2, 0.1, 'TeamF'),
+                          get_empty_player('Player7', 2, 0, 'TeamG', is_useless=True),
+                          get_empty_player('Player8', 3, 5, 'TeamH'),
+                          get_empty_player('Player9', 3, 4, 'TeamI'),
+                          get_empty_player('Player10', 3, 3, 'TeamJ'),
+                          get_empty_player('Player11', 3, 0.1, 'TeamK'),
+                          get_empty_player('Player12', 3, 0, 'TeamL', is_useless=True),
+                          get_empty_player('Player13', 4, 3, 'TeamM'),
+                          get_empty_player('Player14', 4, 4, 'TeamN'),
+                          get_empty_player('Player15', 4, 2, 'TeamO')
+                          ]
+
+        non_squad = [   get_empty_player('Player16', 1, 4, 'TeamA'),
+                        get_empty_player('Player17', 2, 5, 'TeamA'),
+                        get_empty_player('Player18', 3, 4, 'TeamA'),
+                        get_empty_player('Player19', 4, 4.5, 'TeamA')
+                    ]
+
+        trade, trade_gain = agent.get_optimal_single_trade(current_squad, non_squad)
+        self.assertAlmostEqual(trade_gain, 4.9)
+        self.assertEqual(trade[0].name, 'Player6')
+        self.assertEqual(trade[1].name, 'Player17')
+        
         # Test that double sequential trade works alright
         current_squad = [ get_empty_player('Player1', 1, 5, 'TeamA'),
                           get_empty_player('Player2', 1, 3, 'TeamA'),
@@ -171,6 +201,116 @@ class TestAsync(unittest.IsolatedAsyncioTestCase):
         self.assertAlmostEqual(trades["trades_gain"],10.9)
         self.assertEqual(players_out, set({"Player3", "Player4"}))
         self.assertEqual(players_in, set({"Player7", "Player9"}))
+
+        # Test that double trade is exercised for cases when it is optimal
+        current_squad = [ get_empty_player('Player1', 1, 4, 'TeamA'),
+                          get_empty_player('Player2', 1, 0.2, 'TeamB', is_useless=True),
+                          get_empty_player('Player3', 2, 5, 'TeamC'),
+                          get_empty_player('Player4', 2, 4, 'TeamD'),
+                          get_empty_player('Player5', 2, 3, 'TeamE'),
+                          get_empty_player('Player6', 2, 0.1, 'TeamF'),
+                          get_empty_player('Player7', 2, 0, 'TeamG', is_useless=True),
+                          get_empty_player('Player8', 3, 3, 'TeamH', latest_price=6),
+                          get_empty_player('Player9', 3, 1, 'TeamI', latest_price=3),
+                          get_empty_player('Player10', 3, 4, 'TeamJ'),
+                          get_empty_player('Player11', 3, 4, 'TeamK'),
+                          get_empty_player('Player12', 3, 0, 'TeamL', is_useless=True),
+                          get_empty_player('Player13', 4, 3, 'TeamM'),
+                          get_empty_player('Player14', 4, 4, 'TeamN'),
+                          get_empty_player('Player15', 4, 2, 'TeamO')
+                          ]
+        non_squad = [
+            get_empty_player('Player16', 1, 8, 'TeamA', latest_price=2), 
+            get_empty_player('Player17', 3, 10, 'TeamA', latest_price=7), 
+            get_empty_player('Player18', 3, 3, 'TeamB'), 
+            get_empty_player('Player18', 4, 3, 'TeamB')]
+        current_squad, non_squad, trades, to_hold_for_double = agent.make_optimal_trade(current_squad, non_squad)
+        
+        players_out = set({trades["trades"][0][0].name, trades["trades"][1][0].name})
+        players_in = set({trades["trades"][0][1].name, trades["trades"][1][1].name})
+
+        self.assertEqual(to_hold_for_double, True)
+        self.assertEqual(trades["trades_gain"], 9)
+        self.assertEqual(players_out, set({"Player8", "Player9"})) # Cost = 9, performance = 4
+        self.assertEqual(players_in, set({"Player17", "Player18"})) # Cost = 9, performance = 13
+
+        # Test that double is not exercised when it is not optimal.
+        current_squad = [ get_empty_player('Player1', 1, 4, 'TeamA', num_transfers_available=2),
+                          get_empty_player('Player2', 1, 0.2, 'TeamB', is_useless=True),
+                          get_empty_player('Player3', 2, 5, 'TeamC'),
+                          get_empty_player('Player4', 2, 4, 'TeamD'),
+                          get_empty_player('Player5', 2, 3, 'TeamE'),
+                          get_empty_player('Player6', 2, 0.1, 'TeamF'),
+                          get_empty_player('Player7', 2, 0, 'TeamG', is_useless=True),
+                          get_empty_player('Player8', 3, 3, 'TeamH', latest_price=6),
+                          get_empty_player('Player9', 3, 1, 'TeamI', latest_price=3),
+                          get_empty_player('Player10', 3, 4, 'TeamJ'),
+                          get_empty_player('Player11', 3, 4, 'TeamK'),
+                          get_empty_player('Player12', 3, 0, 'TeamL', is_useless=True),
+                          get_empty_player('Player13', 4, 3, 'TeamM'),
+                          get_empty_player('Player14', 4, 4, 'TeamN'),
+                          get_empty_player('Player15', 4, 2, 'TeamO')
+                          ]
+        non_squad = [
+            get_empty_player('Player16', 1, 5, 'TeamA', latest_price=2), 
+            get_empty_player('Player17', 3, 10, 'TeamA', latest_price=6), 
+            get_empty_player('Player18', 3, 3, 'TeamB', latest_price=3), 
+            get_empty_player('Player18', 4, 3, 'TeamB')]
+        current_squad, non_squad, trades, to_hold_for_double = agent.make_optimal_trade(current_squad, non_squad)
+        
+        players_out = set({trades["trades"][0][0].name, trades["trades"][1][0].name})
+        players_in = set({trades["trades"][0][1].name, trades["trades"][1][1].name})
+
+        self.assertEqual(to_hold_for_double, False)
+        self.assertEqual(trades["trades_gain"], 9)
+        self.assertEqual(players_out, set({"Player8", "Player9"})) # Cost = 9, performance = 4
+        self.assertEqual(players_in, set({"Player17", "Player18"})) # Cost = 9, performance = 13
+
+        for player_out in players_out:
+            self.assertEqual(player_out not in [player.name for player in current_squad], True)
+        
+        for player_in in players_in:
+            self.assertEqual(player_in in [player.name for player in current_squad], True)
+        
+
+        # Test that trade only uses one transfer when one is available
+        current_squad = [ get_empty_player('Player1', 1, 4, 'TeamA', num_transfers_available=1),
+                          get_empty_player('Player2', 1, 0.2, 'TeamB', is_useless=True),
+                          get_empty_player('Player3', 2, 5, 'TeamC'),
+                          get_empty_player('Player4', 2, 4, 'TeamD'),
+                          get_empty_player('Player5', 2, 3, 'TeamE'),
+                          get_empty_player('Player6', 2, 0.1, 'TeamF'),
+                          get_empty_player('Player7', 2, 0, 'TeamG', is_useless=True),
+                          get_empty_player('Player8', 3, 3, 'TeamH', latest_price=6),
+                          get_empty_player('Player9', 3, 1, 'TeamI', latest_price=3),
+                          get_empty_player('Player10', 3, 4, 'TeamJ'),
+                          get_empty_player('Player11', 3, 4, 'TeamK'),
+                          get_empty_player('Player12', 3, 0, 'TeamL', is_useless=True),
+                          get_empty_player('Player13', 4, 3, 'TeamM'),
+                          get_empty_player('Player14', 4, 4, 'TeamN'),
+                          get_empty_player('Player15', 4, 2, 'TeamO')
+                          ]
+        non_squad = [
+            get_empty_player('Player16', 1, 5, 'TeamA', latest_price=2), 
+            get_empty_player('Player17', 3, 10, 'TeamA', latest_price=6), 
+            get_empty_player('Player18', 3, 3, 'TeamB', latest_price=3), 
+            get_empty_player('Player18', 4, 3, 'TeamB')]
+        current_squad, non_squad, trades, to_hold_for_double = agent.make_optimal_trade(current_squad, non_squad)
+        
+        players_out = set({trades["trades"][0][0].name})
+        players_in = set({trades["trades"][0][1].name})
+
+        self.assertEqual(to_hold_for_double, False)
+        self.assertEqual(trades["trades_gain"], 7)
+        self.assertEqual(players_out, set({"Player8"})) # Cost = 6, performance = 3
+        self.assertEqual(players_in, set({"Player17"})) # Cost = 9, performance = 10
+
+        for player_out in players_out:
+            self.assertEqual(player_out not in [player.name for player in current_squad], True)
+        
+        for player_in in players_in:
+            self.assertEqual(player_in in [player.name for player in current_squad], True)
+
 
     async def test_get_wildcard_squad(self):
         player_feature_names = ["total_points", "ict_index", "clean_sheets", "saves", "assists"]

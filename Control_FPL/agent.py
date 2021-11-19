@@ -107,6 +107,7 @@ class Agent:
             optimal_trades_gain = 0
             traded = []
             for _ in range(num_trades):
+                print(num_trades, traded)
                 optimal_trade, optimal_trade_gain = self.get_optimal_single_trade(current_squad, non_squad, traded)
                 optimal_trades.append(optimal_trade)
                 optimal_trades_gain += optimal_trade_gain
@@ -196,7 +197,7 @@ class Agent:
             player_in.visualize()
                 
         
-        return current_squad, non_squad
+        return current_squad, non_squad, optimal_trade, to_hold_for_double
 
     def set_playing_11(self, current_squad, visualize=False):
         players_by_position = defaultdict(list)
