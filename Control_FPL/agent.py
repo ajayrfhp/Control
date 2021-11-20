@@ -55,7 +55,7 @@ class Agent:
         current_squad, non_squad = await get_current_squad(player_feature_names, window=self.window, num_players=self.num_players)
         for player in current_squad + non_squad:
             player.predict_next_performance(self.model.model, self.normalizers)
-        current_squad, non_squad = self.make_optimal_trade(current_squad, non_squad)
+        current_squad, non_squad, _, _ = self.make_optimal_trade(current_squad, non_squad)
         return current_squad, non_squad
     
     async def load_latest_model(self):
