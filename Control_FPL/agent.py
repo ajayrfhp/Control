@@ -31,13 +31,11 @@ class Agent:
         os.environ['GAMEWEEK'] = '12_2021'
         self.player_feature_names = player_feature_names
         self.model = LightningWrapper(window_size=window, num_features=len(player_feature_names),  
-                    model_type='linear')
-        print(self.model)
+                    model_type='linear', player_feature_names = player_feature_names)
         self.players = None
         self.train_loader, self.test_loader, self.normalizers = None, None, None
         self.window = window
         self.epochs = epochs
-        self.trainer = pl.Trainer(max_epochs=epochs, gpus=torch.cuda.device_count())
         self.num_players = num_players
         self.model_directory = './results/models/'
         
@@ -46,10 +44,10 @@ class Agent:
         players = await get_players(self.player_feature_names, window=self.window, visualize=False, num_players=self.num_players)
         self.train_loader, self.test_loader, self.normalizers = get_training_datasets(players, batch_size=2000)
 
-    async def update_model(self):
-        self.trainer.fit(self.model, self.train_loader, self.test_loader)
-        self.trainer.save_checkpoint(f"{self.model_directory}{os.environ['GAMEWEEK']}.ckpt")
-        self.trainer.save_checkpoint(f"{self.model_directory}latest.ckpt")
+    async def update_model(self, trainer):
+        trainer.fit(self.model, self.train_loader, self.test_loader)
+        trainer.save_checkpoint(f"{self.model_directory}{os.environ['GAMEWEEK']}.ckpt")
+        trainer.save_checkpoint(f"{self.model_directory}latest.ckpt")
 
     async def get_new_squad(self, player_feature_names):
         current_squad, non_squad = await get_current_squad(player_feature_names, window=self.window, num_players=self.num_players)
@@ -300,22 +298,30 @@ if __name__ == "__main__":
     parser.add_argument('--update_squad', type=str, default="False", help='Run inference mode. Download latest data, get new squad')
     parser.add_argument('--epochs', type=int, default=30, help='Number of epochs to train. Invalid option for inference mode')
     parser.add_argument('--player_feature_names', nargs='+', default=["total_points", "ict_index", "clean_sheets", "saves", "assists"], help='player feature names')
+    parser.add_argument('--feature_comparison', type=str, default=False, help='compare different feature sets with linear model')
     os.environ['GAMEWEEK'] = '12_2021'
     args = parser.parse_args()
     
-    
+    trainer = pl.Trainer(max_epochs=args.epochs, gpus=torch.cuda.device_count())
     if args.run_E2E_agent == "True":
         gameweek = os.environ['GAMEWEEK']
         os.system('source activate control')
         os.system('papermill agent.ipynb agent.ipynb')
         os.system(f'cp agent.ipynb results/agent_{gameweek}.ipynb')
         os.system(f'jupyter nbconvert --to html results/agent_{gameweek}.ipynb')
+    elif args.feature_comparison == "True":
+        base_feature_set = ["total_points", "ict_index", "clean_sheets", "saves", "assists", "was_home"]
+        for num_features in range(1, len(base_feature_set) + 1):
+            features = base_feature_set[:num_features]
+            agent = Agent(features, epochs=args.epochs)
+            asyncio.run(agent.get_data())
+            asyncio.run(agent.update_model(trainer))
     else:
         agent = Agent(args.player_feature_names, epochs=args.epochs)
         asyncio.run(agent.get_data())
         if args.update_model == "True":
             print('retraining')
-            asyncio.run(agent.update_model())
+            asyncio.run(agent.update_model(trainer))
         if args.update_squad == "True":
             asyncio.run(agent.load_latest_model())
             new_squad, non_squad = asyncio.run(agent.get_new_squad(args.player_feature_names))

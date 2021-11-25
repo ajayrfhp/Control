@@ -348,6 +348,22 @@
   - Automatically figure out game week id
   - Figure out injuries
     - Use NLP to get injury information from twitter - Siddarth's idea
-    - Use average number of minutes played in last 3 games as proxy for amount of time played.
+  - Transfer should be automatic 
+  - Can we use orchestration engine to automate download and model training ?
+
+
+# 19 November 9:27 AM
+- Better ML engineering
+  - Compare different feature sets
+  - Compare different window sizes
+  - Compare different models
+- Bayesian linear model
+  - Predict player scores with uncertainity
+- Better bin packing
+  - 3d knapsack
+- Better pipeline
+  - Automatically figure out game week id
+  - Figure out injuries
+    - Use NLP to get injury information from twitter - Siddarth's idea
   - Transfer should be automatic 
   - Can we use orchestration engine to automate download and model training ?

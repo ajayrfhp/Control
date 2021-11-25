@@ -57,10 +57,11 @@ class RNNModel(nn.Module):
         return o.reshape((-1, ))
 
 class LightningWrapper(pl.LightningModule):
-    def __init__(self, window_size=4, num_features=5, model_type='linear'):
+    def __init__(self, window_size=4, num_features=5, model_type='linear', player_feature_names=["total_points", "ict_index", "clean_sheets", "saves", "assists"]):
         super().__init__()
         self.window_size = window_size
         self.dim = window_size * num_features
+        self.feature_string = ','.join(player_feature_names)
         if model_type == 'linear':
             self.model = LinearModel(window_size, num_features)
         elif model_type == 'RNN':
@@ -78,21 +79,18 @@ class LightningWrapper(pl.LightningModule):
         x = batch[0]
         inputs = x[:,:,:self.window_size]
         outputs = x[:,0,self.window_size]
-        print(inputs.shape)
         predictions = self.model.forward(inputs)
         loss = nn.MSELoss()(predictions, outputs)
-        self.log(f'{self.model_type} {self.dim} = train_loss', loss)
+        self.logger.experiment.add_scalars("blah", { f"features : {self.feature_string} model : {self.model_type} train_loss" : loss})
         return loss 
 
     def validation_step(self, batch, batch_idx):
         loss = self.training_step(batch, batch_idx)
-        self.log(f'{self.model_type} {self.dim}= val_loss', loss)
+        self.logger.experiment.add_scalars("blah", { f"features : {self.feature_string} model : {self.model_type} val_loss" : loss})
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
         return optimizer
-    
-
 
 if __name__ == "__main__":
     input_tensor = torch.tensor([[0, 2, 4, 6], [1, 3, 5, 7]]).reshape((2, 1, 4)).double()
