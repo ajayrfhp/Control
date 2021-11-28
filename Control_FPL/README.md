@@ -45,3 +45,4 @@ a
 ## Resources
 - [Alan turing institute](https://github.com/alan-turing-institute/AIrsenal)
 - [Profiling with python](https://ymichael.com/2014/03/08/profiling-python-with-cprofile.html)
+- [Awesome ML OPS](https://github.com/visenger/awesome-mlops)

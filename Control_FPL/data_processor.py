@@ -15,7 +15,7 @@ from torch.utils.data import TensorDataset, DataLoader
 from player import Player
 from team import Team
 from key import *
-
+from itertools import chain, combinations
 
 def get_normalized_team_names():
     """Function provides normalized team names to avoid cross year messes
@@ -281,12 +281,22 @@ async def get_fpl():
         fpl = FPL(session)
         return fpl
 
+def powerset(s):
+    subsets = []
+    for num_elements in range(len(s) + 1):
+        subset = combinations(s, num_elements)
+        subsets.extend(list(subset))
+    return subsets
+
+
+
 if __name__ == "__main__":
     fpl = asyncio.run(get_fpl())
-    players = asyncio.run(get_players(["total_points", "ict_index", 'goals_scored', 'assists', 'clean_sheets', "goals_conceded", "saves"], 
-    team_feature_names=["npxGA", "npxG", "scored", "xG","xGA","xpts"], visualize=False, num_players=5))
-    teams = get_teams(team_feature_names=["npxGA", "npxG", "scored", "xG","xGA","xpts"], visualize=False)
-    train_loader, test_loader,_ = get_training_datasets(players, teams)
+    #players = asyncio.run(get_players(["total_points", "ict_index", 'goals_scored', 'assists', 'clean_sheets', "goals_conceded", "saves"]))
+    print(powerset([1, 2, 3, 4]))
+    #team_feature_names=["npxGA", "npxG", "scored", "xG","xGA","xpts"], visualize=False, num_players=5))
+    #teams = get_teams(team_feature_names=["npxGA", "npxG", "scored", "xG","xGA","xpts"], visualize=False)
+    #train_loader, test_loader,_ = get_training_datasets(players, teams)
     #print(players)
     #print(teams)
     #print(get_normalized_team_names())

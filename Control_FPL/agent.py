@@ -1,8 +1,7 @@
 import argparse
 from collections import defaultdict
-import itertools
+from importlib.metadata import version
 import pickle
-from numpy.testing._private.utils import assert_equal
 import wget
 import os
 import pandas as pd
@@ -19,35 +18,40 @@ from fpl import FPL
 from torch.utils.data import TensorDataset, DataLoader
 from player import Player
 from team import Team
-from data_processor import get_fpl, get_current_squad, get_teams, get_players, get_training_datasets
+from data_processor import get_fpl, get_current_squad, get_teams, get_players, get_training_datasets, powerset
 from models import LightningWrapper
 from key import *
 import knapsack
 import pytorch_lightning as pl
+from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 
 
 class Agent:
-    def __init__(self, player_feature_names, window=4, epochs=50, num_players=680):
+    def __init__(self, player_feature_names, window=4, epochs=50, num_players=680, model_type='linear', lr=1e-3, weight_decay=0):
         os.environ['GAMEWEEK'] = '12_2021'
         self.player_feature_names = player_feature_names
         self.model = LightningWrapper(window_size=window, num_features=len(player_feature_names),  
-                    model_type='linear', player_feature_names = player_feature_names)
+                    model_type=model_type, player_feature_names = player_feature_names, lr=lr, weight_decay=weight_decay)
         self.players = None
         self.train_loader, self.test_loader, self.normalizers = None, None, None
         self.window = window
         self.epochs = epochs
+        self.model_type = model_type
         self.num_players = num_players
         self.model_directory = './results/models/'
         
     
     async def get_data(self):
         players = await get_players(self.player_feature_names, window=self.window, visualize=False, num_players=self.num_players)
-        self.train_loader, self.test_loader, self.normalizers = get_training_datasets(players, batch_size=2000)
+        self.train_loader, self.test_loader, self.normalizers = get_training_datasets(players, batch_size=2000, window_size=self.window+1)
 
     async def update_model(self, trainer):
-        trainer.fit(self.model, self.train_loader, self.test_loader)
-        trainer.save_checkpoint(f"{self.model_directory}{os.environ['GAMEWEEK']}.ckpt")
-        trainer.save_checkpoint(f"{self.model_directory}latest.ckpt")
+        if self.model_type in ['linear', 'rnn']:
+            trainer.fit(self.model, self.train_loader, self.test_loader)
+            trainer.save_checkpoint(f"{self.model_directory}{os.environ['GAMEWEEK']}.ckpt")
+            trainer.save_checkpoint(f"{self.model_directory}latest.ckpt")
+        else:
+            trainer.validate(self.model, self.test_loader)
 
     async def get_new_squad(self, player_feature_names):
         current_squad, non_squad = await get_current_squad(player_feature_names, window=self.window, num_players=self.num_players)
@@ -57,12 +61,13 @@ class Agent:
         return current_squad, non_squad
     
     async def load_latest_model(self):
-        if os.path.exists(f"{self.model_directory}{os.environ['GAMEWEEK']}.ckpt"):
-            self.model = LightningWrapper.load_from_checkpoint(f"{self.model_directory}{os.environ['GAMEWEEK']}.ckpt", window_size=self.window, num_features=len(self.player_feature_names))
-        elif os.path.exists(f"{self.model_directory}latest.ckpt"):
-            self.model = LightningWrapper.load_from_checkpoint(f"{self.model_directory}latest.ckpt", window_size=self.window, num_features=len(self.player_feature_names))
-        else:
-            await self.update_model()
+        if self.model_type in ['linear', 'rnn']:
+            if os.path.exists(f"{self.model_directory}{os.environ['GAMEWEEK']}.ckpt"):
+                self.model = LightningWrapper.load_from_checkpoint(f"{self.model_directory}{os.environ['GAMEWEEK']}.ckpt", window_size=self.window, num_features=len(self.player_feature_names))
+            elif os.path.exists(f"{self.model_directory}latest.ckpt"):
+                self.model = LightningWrapper.load_from_checkpoint(f"{self.model_directory}latest.ckpt", window_size=self.window, num_features=len(self.player_feature_names))
+            else:
+                await self.update_model()
 
     def get_optimal_single_trade(self, current_squad, non_squad,  traded = []):
             players_in_same_team = defaultdict(int)
@@ -299,10 +304,11 @@ if __name__ == "__main__":
     parser.add_argument('--epochs', type=int, default=30, help='Number of epochs to train. Invalid option for inference mode')
     parser.add_argument('--player_feature_names', nargs='+', default=["total_points", "ict_index", "clean_sheets", "saves", "assists"], help='player feature names')
     parser.add_argument('--feature_comparison', type=str, default=False, help='compare different feature sets with linear model')
+    parser.add_argument('--window_comparison', type=str, default=False, help='compare windows of different length with linear model')
+    parser.add_argument('--model_comparison', type=str, default=False, help='compare different models')
     os.environ['GAMEWEEK'] = '12_2021'
     args = parser.parse_args()
     
-    trainer = pl.Trainer(max_epochs=args.epochs, gpus=torch.cuda.device_count())
     if args.run_E2E_agent == "True":
         gameweek = os.environ['GAMEWEEK']
         os.system('source activate control')
@@ -310,10 +316,34 @@ if __name__ == "__main__":
         os.system(f'cp agent.ipynb results/agent_{gameweek}.ipynb')
         os.system(f'jupyter nbconvert --to html results/agent_{gameweek}.ipynb')
     elif args.feature_comparison == "True":
-        base_feature_set = ["total_points", "ict_index", "clean_sheets", "saves", "assists", "was_home"]
-        for num_features in range(1, len(base_feature_set) + 1):
-            features = base_feature_set[:num_features]
-            agent = Agent(features, epochs=args.epochs)
+        base_feature_set = ["ict_index", "clean_sheets", "saves", "assists", "was_home","goals_scored", "goals_conceded"]
+        for feature_set in powerset(base_feature_set):
+            features = ["total_points"] + list(feature_set)
+            if len(features) > 0:
+                feature_string = '-'.join(features)
+                logger = pl.loggers.TensorBoardLogger(f"lightning_logs/feature_comparison/{feature_string}")
+                trainer = pl.Trainer(max_epochs=args.epochs, gpus=torch.cuda.device_count(), logger=logger)
+                agent = Agent(features, epochs=args.epochs, window=6)
+                asyncio.run(agent.get_data())
+                asyncio.run(agent.update_model(trainer))
+    elif args.window_comparison == "True":
+        features = ["total_points", "ict_index", "clean_sheets", "saves", "assists", "was_home","goals_scored", "goals_conceded"]
+        for window in range(2, 8):
+            logger = pl.loggers.TensorBoardLogger(f"lightning_logs/window_comparison/{window}")
+            trainer = pl.Trainer(max_epochs=args.epochs, gpus=torch.cuda.device_count(), logger=logger)
+            agent = Agent(features, epochs=args.epochs, window=window)
+            asyncio.run(agent.get_data())
+            asyncio.run(agent.update_model(trainer))
+    elif args.model_comparison == "True":
+        model_types = ['previous','linear','rnn','average']
+        for model_type in model_types:
+            features = ["total_points", "ict_index", "clean_sheets", "saves", "assists", "was_home","goals_scored", "goals_conceded"]
+            logger = pl.loggers.TensorBoardLogger(f"lightning_logs/model_comparison/{model_type}")
+            lr, weight_decay = 1e-3, 0
+            if model_type == "rnn":
+                lr, weight_decay = 5e-4, 1e-4
+            trainer = pl.Trainer(max_epochs=args.epochs, gpus=torch.cuda.device_count(), logger=logger,  callbacks=[EarlyStopping(monitor="val_loss", patience=5)])
+            agent = Agent(features, epochs=args.epochs, window=6, model_type=model_type, lr=lr, weight_decay=weight_decay)
             asyncio.run(agent.get_data())
             asyncio.run(agent.update_model(trainer))
     else:
@@ -321,10 +351,11 @@ if __name__ == "__main__":
         asyncio.run(agent.get_data())
         if args.update_model == "True":
             print('retraining')
+            logger = pl.loggers.TensorBoardLogger(f"lightning_logs/")
+            trainer = pl.Trainer(max_epochs=args.epochs, gpus=torch.cuda.device_count(), logger=logger)
             asyncio.run(agent.update_model(trainer))
         if args.update_squad == "True":
             asyncio.run(agent.load_latest_model())
             new_squad, non_squad = asyncio.run(agent.get_new_squad(args.player_feature_names))
             agent.set_playing_11(new_squad)
             agent.show_top_performers(new_squad + non_squad, k=10)
-        

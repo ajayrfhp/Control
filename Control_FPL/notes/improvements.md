@@ -367,3 +367,18 @@
     - Use NLP to get injury information from twitter - Siddarth's idea
   - Transfer should be automatic 
   - Can we use orchestration engine to automate download and model training ?
+
+# 28 November 21:29 PM
+- Bayesian linear model
+  - Predict player scores with uncertainity
+- Better bin packing
+  - 3d knapsack
+- Better pipeline
+  - Automatically figure out game week id
+  - Figure out injuries
+    - Use NLP to get injury information from twitter - Siddarth's idea
+  - Make it fully automatic
+    - Make transfer automatically
+    - Download dataset to automatically
+    - Figure out game id automatically
+    - Use orchestration engine that triggers complete run of agent based on FPL deadline. 
