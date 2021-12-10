@@ -382,3 +382,23 @@
     - Download dataset to automatically
     - Figure out game id automatically
     - Use orchestration engine that triggers complete run of agent based on FPL deadline. 
+
+# 10 December 04:00 PM
+- Add test for get wild card squad
+- Bayesian linear model
+  - Predict player scores with uncertainity
+- Better bin packing
+  - 3d knapsack
+- Better pipeline
+  - Automatically figure out game week id
+  - Figure out injuries
+    - Use NLP to get injury information from twitter - Siddarth's idea
+  - Figure out cancelled games
+  - Make it fully automatic
+    - Make transfer automatically
+    - Download dataset to automatically
+    - Figure out game id automatically
+    - Use orchestration engine that triggers complete run of agent based on FPL deadline. 
+  
+
+

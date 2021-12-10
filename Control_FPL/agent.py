@@ -23,12 +23,13 @@ from models import LightningWrapper
 from key import *
 import knapsack
 import pytorch_lightning as pl
+import itertools
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 
 
 class Agent:
     def __init__(self, player_feature_names, window=4, epochs=50, num_players=680, model_type='linear', lr=1e-3, weight_decay=0):
-        os.environ['GAMEWEEK'] = '12_2021'
+        os.environ['GAMEWEEK'] = '16_2021'
         self.player_feature_names = player_feature_names
         self.model = LightningWrapper(window_size=window, num_features=len(player_feature_names),  
                     model_type=model_type, player_feature_names = player_feature_names, lr=lr, weight_decay=weight_decay)
@@ -276,6 +277,8 @@ class Agent:
                 budget -= sum(best_weights_in_position)
                 potential_best_15.extend(list(best_player_in_position))
                 potential_best_value += sum(best_values_in_position)
+                for player in best_player_in_position:
+                    global_num_teams_in_path[player.team] += 1
                 
                 # choose cheap filler players
                 players_in_position = [player for player in squad if player.position == position and global_num_teams_in_path[player.team] <= 2]
@@ -285,12 +288,14 @@ class Agent:
             
             
             potential_best_15 = sorted(potential_best_15, key = lambda x : x.position)
+            max_players_from_side = 0
+            for value in global_num_teams_in_path.values():
+                max_players_from_side = max(max_players_from_side, value)
             if potential_best_value >= best_value and len(potential_best_15) == 15:
                 best_15 = list(potential_best_15)
                 best_value = potential_best_value
 
-        for value in global_num_teams_in_path.values():
-            assert(value <= 3)
+        
         if visualize:
             for player in best_15:    
                 player.visualize()
@@ -306,7 +311,7 @@ if __name__ == "__main__":
     parser.add_argument('--feature_comparison', type=str, default=False, help='compare different feature sets with linear model')
     parser.add_argument('--window_comparison', type=str, default=False, help='compare windows of different length with linear model')
     parser.add_argument('--model_comparison', type=str, default=False, help='compare different models')
-    os.environ['GAMEWEEK'] = '12_2021'
+    os.environ['GAMEWEEK'] = '16_2021'
     args = parser.parse_args()
     
     if args.run_E2E_agent == "True":
@@ -316,7 +321,7 @@ if __name__ == "__main__":
         os.system(f'cp agent.ipynb results/agent_{gameweek}.ipynb')
         os.system(f'jupyter nbconvert --to html results/agent_{gameweek}.ipynb')
     elif args.feature_comparison == "True":
-        base_feature_set = ["ict_index", "clean_sheets", "saves", "assists", "was_home","goals_scored", "goals_conceded"]
+        base_feature_set = ["ict_index", "clean_sheets", "saves", "assists", "was_home","goals_scored"]
         for feature_set in powerset(base_feature_set):
             features = ["total_points"] + list(feature_set)
             if len(features) > 0:
@@ -327,7 +332,7 @@ if __name__ == "__main__":
                 asyncio.run(agent.get_data())
                 asyncio.run(agent.update_model(trainer))
     elif args.window_comparison == "True":
-        features = ["total_points", "ict_index", "clean_sheets", "saves", "assists", "was_home","goals_scored", "goals_conceded"]
+        features = ["total_points", "ict_index", "clean_sheets", "saves", "assists", "was_home","goals_scored"]
         for window in range(2, 8):
             logger = pl.loggers.TensorBoardLogger(f"lightning_logs/window_comparison/{window}")
             trainer = pl.Trainer(max_epochs=args.epochs, gpus=torch.cuda.device_count(), logger=logger)
@@ -337,7 +342,7 @@ if __name__ == "__main__":
     elif args.model_comparison == "True":
         model_types = ['previous','linear','rnn','average']
         for model_type in model_types:
-            features = ["total_points", "ict_index", "clean_sheets", "saves", "assists", "was_home","goals_scored", "goals_conceded"]
+            features = ["total_points", "ict_index", "clean_sheets", "saves", "assists", "was_home","goals_scored"]
             logger = pl.loggers.TensorBoardLogger(f"lightning_logs/model_comparison/{model_type}")
             lr, weight_decay = 1e-3, 0
             if model_type == "rnn":
