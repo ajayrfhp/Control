@@ -325,15 +325,44 @@ class TestAsync(unittest.IsolatedAsyncioTestCase):
 
 class TestWildcard(unittest.TestCase):
     def test_knapsack(self):
-        path, weights, values, team_dict = knapsack.solve_knapsack(weights=[4, 3, 1], values=[2, 2, 1], names=['a', 'b', 'c'],max_weight=5, num_players=3, teams=['t1','t1','t1'], max_players_from_one_team=2, global_num_teams_in_path=defaultdict(int))
-        self.assertCountEqual(path, ['b','c'])
-        self.assertCountEqual(weights, [3, 1])
-        self.assertCountEqual(values, [2, 1])
+        global_num_teams_in_path = defaultdict(int)
+        path, weights, values, team_dict = knapsack.solve_knapsack(weights=[1, 1, 1, 1], values=[4, 4, 2, 4], names=['a', 'b', 'c', 'd'], max_weight=4, num_players=3, teams=['t1','t1','t2','t1'], max_players_from_one_team=2, global_num_teams_in_path=global_num_teams_in_path)
+        self.assertCountEqual(path, ['a', 'b', 'c'])
+        self.assertCountEqual(weights, [1, 1, 1])
+        self.assertCountEqual(values, [4, 4, 2])
 
         path, weights, values, team_dict = knapsack.solve_knapsack(weights=[4, 3, 1], values=[2, 2, 1], names=['a', 'b', 'c'],max_weight=5, num_players=3, teams=['t1','t1','t1'], max_players_from_one_team=1, global_num_teams_in_path=defaultdict(int))
         self.assertCountEqual(path, ['b'])
         self.assertCountEqual(weights, [3])
         self.assertCountEqual(values, [2])
+    
+    def test_wildcard(self):
+        squad = [ get_empty_player('Player1', 1, 5, 'TeamA'),
+                          get_empty_player('Player2', 1, 0.2, 'TeamB'),
+                          get_empty_player('Player3', 1, 0.2, 'TeamC'),
+
+                          get_empty_player('Player4', 2, 10, 'TeamA'),
+                          get_empty_player('Player5', 2, 7, 'TeamA'),
+                          get_empty_player('Player6', 2, 8, 'TeamA'),
+                          get_empty_player('Player7', 2, 0.1, 'TeamC'),
+                          get_empty_player('Player8', 2, 0.1, 'TeamC'),
+
+                          get_empty_player('Player9', 3, 0.5, 'TeamH'),
+                          get_empty_player('Player10', 3, 0.5, 'TeamI'),
+                          get_empty_player('Player11', 3, 0.5, 'TeamJ'),
+                          get_empty_player('Player12', 3, 0.5, 'TeamK'),
+                          get_empty_player('Player13', 3, 0.5, 'TeamL'),
+
+                          get_empty_player('Player14', 4, 0.5, 'TeamM'),
+                          get_empty_player('Player15', 4, 0.5, 'TeamN'),
+                          get_empty_player('Player16', 4, 0.5, 'TeamO')
+                          ]
+
+        player_feature_names = ["total_points", "ict_index", "clean_sheets", "saves", "assists"]
+        agent = Agent(player_feature_names, epochs=1)
+        wildcard_squad = agent.get_wildcard_squad(squad)
+        selected_players = [player.name for player in wildcard_squad]
+        self.assertEqual(set(selected_players), set(['Player2','Player3','Player4','Player5','Player6','Player7','Player8','Player9','Player10','Player11','Player12','Player13','Player14','Player15', 'Player16']))
 
     
 

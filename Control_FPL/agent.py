@@ -276,17 +276,18 @@ class Agent:
                 best_player_in_position, best_weights_in_position, best_values_in_position, global_num_teams_in_path = knapsack_by_position(squad, position, num_contribution, budget, global_num_teams_in_path)
                 budget -= sum(best_weights_in_position)
                 potential_best_15.extend(list(best_player_in_position))
+                choosen_players = [player.name for player in potential_best_15]
                 potential_best_value += sum(best_values_in_position)
-                for player in best_player_in_position:
-                    global_num_teams_in_path[player.team] += 1
-                
+  
                 # choose cheap filler players
-                players_in_position = [player for player in squad if player.position == position and global_num_teams_in_path[player.team] <= 2]
+                players_in_position = [player for player in squad if player.position == position and global_num_teams_in_path[player.team] <= 1 and player.name not in choosen_players ]
                 players_in_position = sorted(players_in_position, key = lambda x : x.latest_price)[:(num_players-num_contribution)]
                 budget -= sum([player.latest_price for player in players_in_position])
                 potential_best_15.extend(players_in_position)  
-            
-            
+
+                for player in players_in_position:
+                    global_num_teams_in_path[player.team] += 1
+
             potential_best_15 = sorted(potential_best_15, key = lambda x : x.position)
             max_players_from_side = 0
             for value in global_num_teams_in_path.values():
@@ -295,7 +296,6 @@ class Agent:
                 best_15 = list(potential_best_15)
                 best_value = potential_best_value
 
-        
         if visualize:
             for player in best_15:    
                 player.visualize()

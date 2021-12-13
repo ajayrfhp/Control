@@ -26,24 +26,24 @@ def solve_knapsack(weights, values, names, max_weight, num_players, teams=[], ma
             team_in_path.append([])
         paths.append(path)
         teams_in_path.append(team_in_path)
-
     for i in range(1, dp.shape[0]):
         for j in range(1, dp.shape[1]):
             is_valid = True 
             num_teams_in_path = defaultdict(int)
             for team in teams_in_path[i-1][j-weights[i-1]]:
                 num_teams_in_path[team] += 1
-            is_valid = num_teams_in_path[teams[i-1]] < max_players_from_one_team and global_num_teams_in_path[teams[i-1]] < max_players_from_one_team
+            num_teams_in_path[teams[i-1]] += global_num_teams_in_path[teams[i-1]]
+            is_valid = num_teams_in_path[teams[i-1]] < max_players_from_one_team
             if is_valid and j >= weights[i-1] and (values[i-1] + dp[i-1][j-weights[i-1]] >= dp[i-1][j]) and len(paths[i-1][j-weights[i-1]]) < num_players:
                 dp[i][j] = values[i-1] + dp[i-1][j-weights[i-1]]
-                paths[i][j].extend(paths[i-1][j-weights[i-1]] + [names[i-1]])
-                teams_in_path[i][j].extend(teams_in_path[i-1][j-weights[i-1]] + [teams[i-1]])
+                paths[i][j] = list(paths[i-1][j-weights[i-1]] + [names[i-1]])
+                teams_in_path[i][j] = list(teams_in_path[i-1][j-weights[i-1]] + [teams[i-1]])
             else:
                 dp[i][j] = dp[i-1][j]
                 paths[i][j] = list(paths[i-1][j])
                 teams_in_path[i][j] = list(teams_in_path[i-1][j])
     
-
+    
     best_path = dp[-1].argmax()    
     
     indices = [ names.index(name) for name in paths[-1][best_path] ]
