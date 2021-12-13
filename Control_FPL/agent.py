@@ -29,7 +29,7 @@ from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 
 class Agent:
     def __init__(self, player_feature_names, window=4, epochs=50, num_players=680, model_type='linear', lr=1e-3, weight_decay=0):
-        os.environ['GAMEWEEK'] = '16_2021'
+        os.environ['GAMEWEEK'] = '17_2021'
         self.player_feature_names = player_feature_names
         self.model = LightningWrapper(window_size=window, num_features=len(player_feature_names),  
                     model_type=model_type, player_feature_names = player_feature_names, lr=lr, weight_decay=weight_decay)
@@ -311,7 +311,7 @@ if __name__ == "__main__":
     parser.add_argument('--feature_comparison', type=str, default=False, help='compare different feature sets with linear model')
     parser.add_argument('--window_comparison', type=str, default=False, help='compare windows of different length with linear model')
     parser.add_argument('--model_comparison', type=str, default=False, help='compare different models')
-    os.environ['GAMEWEEK'] = '16_2021'
+    os.environ['GAMEWEEK'] = '17_2021'
     args = parser.parse_args()
     
     if args.run_E2E_agent == "True":
