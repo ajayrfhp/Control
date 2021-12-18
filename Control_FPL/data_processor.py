@@ -16,6 +16,16 @@ from player import Player
 from team import Team
 from key import *
 from itertools import chain, combinations
+from datetime import datetime
+
+async def get_latest_game_week():
+    async with aiohttp.ClientSession() as session:
+        fpl = FPL(session)
+        gameweeks = await fpl.get_gameweeks()
+        for gameweek in gameweeks:
+            if datetime.now() <= datetime.fromisoformat(gameweek.deadline_time[:-1]) and not gameweek.finished:
+                latest_gameweek = gameweek
+                return latest_gameweek
 
 def get_normalized_team_names():
     """Function provides normalized team names to avoid cross year messes

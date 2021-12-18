@@ -416,4 +416,33 @@
     - Figure out game id automatically
     - Use orchestration engine that triggers complete run of agent based on FPL deadline. 
 
+# 18 Dec 10:59
+- Bayesian linear model
+  - Predict player scores with uncertainity
+- Better bin packing
+  - 3d knapsack
+- Better pipeline
+  - Automatically figure out game week id
+  - Figure out injuries
+    - Use NLP to get injury information from twitter - Siddarth's idea
+  - Figure out cancelled games
+  - Make it fully automatic
+    - Make transfer automatically
+    - Download dataset to automatically
+    - Figure out game id automatically
+    - Use orchestration engine that triggers complete run of agent based on FPL deadline. 
+
+# 18 Dec 17:35
+- Bayesian linear model
+  - Predict player scores with uncertainity
+- Better bin packing
+  - 3d knapsack
+- Better pipeline
+  - Estimate chance of playing per player - use NLP to get injury info from twitter - Siddarth's idea
+  - Fully automatic pipeline
+    - Automatically figure out game week id
+    - Download dataset
+    - Trigger run of agent based on FPL deadline. 
+- Share codebase with others. 
+
 

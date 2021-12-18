@@ -1,16 +1,19 @@
 from collections import defaultdict
+import aiohttp
 import numpy as np
 import unittest
 import os
 import random
 from agent import Agent
-from data_processor import get_player_features, get_team_features, get_teams, get_players, get_training_datasets, get_current_squad
+from data_processor import get_player_features, get_team_features, get_teams, get_players, get_training_datasets, get_current_squad, get_latest_game_week
 from model_utils import pearson_correlation
 import knapsack
 import asyncio
 import torch
 from player import Player
 from agent import Agent
+from fpl import FPL
+from datetime import datetime
 
 def get_empty_player(name, integer_position, predicted_performance, team, latest_price=2, num_features=5, window=4, num_transfers_available=1, bank=0, is_useless=False):
             random_id = random.getrandbits(128)
@@ -364,7 +367,15 @@ class TestWildcard(unittest.TestCase):
         selected_players = [player.name for player in wildcard_squad]
         self.assertEqual(set(selected_players), set(['Player2','Player3','Player4','Player5','Player6','Player7','Player8','Player9','Player10','Player11','Player12','Player13','Player14','Player15', 'Player16']))
 
-    
+
+class TestAsync(unittest.IsolatedAsyncioTestCase):
+    async def test_latest_game_week(self):
+        gameweek = await get_latest_game_week()
+        print(gameweek.deadline_time)
+
+
+
+
 
 
 

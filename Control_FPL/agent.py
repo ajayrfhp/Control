@@ -19,7 +19,7 @@ from fpl import FPL
 from torch.utils.data import TensorDataset, DataLoader
 from player import Player
 from team import Team
-from data_processor import get_fpl, get_current_squad, get_teams, get_players, get_training_datasets, powerset
+from data_processor import get_fpl, get_current_squad, get_latest_game_week, get_teams, get_players, get_training_datasets, powerset
 from models import LightningWrapper
 from key import *
 import knapsack
@@ -30,8 +30,7 @@ import heapq
 
 
 class Agent:
-    def __init__(self, player_feature_names, window=4, epochs=50, num_players=680, model_type='linear', lr=1e-3, weight_decay=0):
-        os.environ['GAMEWEEK'] = '18_2021'
+    def __init__(self, player_feature_names, window=4, epochs=50, num_players=680, model_type='linear', lr=1e-3, weight_decay=0, gameweek=None):
         self.player_feature_names = player_feature_names
         self.model = LightningWrapper(window_size=window, num_features=len(player_feature_names),  
                     model_type=model_type, player_feature_names = player_feature_names, lr=lr, weight_decay=weight_decay)
@@ -42,6 +41,7 @@ class Agent:
         self.model_type = model_type
         self.num_players = num_players
         self.model_directory = './results/models/'
+        self.gameweek = gameweek
         
     
     async def get_data(self):
@@ -51,7 +51,7 @@ class Agent:
     async def update_model(self, trainer):
         if self.model_type in ['linear', 'rnn']:
             trainer.fit(self.model, self.train_loader, self.test_loader)
-            trainer.save_checkpoint(f"{self.model_directory}{os.environ['GAMEWEEK']}.ckpt")
+            trainer.save_checkpoint(f"{self.model_directory}{self.gameweek}.ckpt")
             trainer.save_checkpoint(f"{self.model_directory}latest.ckpt")
         else:
             trainer.validate(self.model, self.test_loader)
@@ -65,8 +65,8 @@ class Agent:
     
     async def load_latest_model(self):
         if self.model_type in ['linear', 'rnn']:
-            if os.path.exists(f"{self.model_directory}{os.environ['GAMEWEEK']}.ckpt"):
-                self.model = LightningWrapper.load_from_checkpoint(f"{self.model_directory}{os.environ['GAMEWEEK']}.ckpt", window_size=self.window, num_features=len(self.player_feature_names))
+            if os.path.exists(f"{self.model_directory}{self.gameweek}.ckpt"):
+                self.model = LightningWrapper.load_from_checkpoint(f"{self.model_directory}{self.gameweek}.ckpt", window_size=self.window, num_features=len(self.player_feature_names))
             elif os.path.exists(f"{self.model_directory}latest.ckpt"):
                 self.model = LightningWrapper.load_from_checkpoint(f"{self.model_directory}latest.ckpt", window_size=self.window, num_features=len(self.player_feature_names))
             else:
@@ -203,7 +203,7 @@ class Agent:
                     await fpl.login(email=email, password=password)
                     user = await fpl.get_user(user_id)
                     try : 
-                        await user.transfer([player_out.id], [player_in.id], max_hit=60)
+                        await user.transfer([player_out.id], [player_in.id], max_hit=0)
                     except aiohttp.ContentTypeError or KeyError:
                         print(f'successful transfer {player_out.name} {player_in.name}')
 
@@ -337,12 +337,11 @@ if __name__ == "__main__":
     parser.add_argument('--feature_comparison', type=str, default=False, help='compare different feature sets with linear model')
     parser.add_argument('--window_comparison', type=str, default=False, help='compare windows of different length with linear model')
     parser.add_argument('--model_comparison', type=str, default=False, help='compare different models')
-    os.environ['GAMEWEEK'] = '18_2021'
     args = parser.parse_args()
     
     if args.run_E2E_agent == "True":
-        gameweek = os.environ['GAMEWEEK']
-        os.system('source activate control')
+        gameweek = asyncio.run(get_latest_game_week()).deadline_time
+        os.system('source activate test')
         os.system('papermill agent.ipynb agent.ipynb')
         os.system(f'cp agent.ipynb results/agent_{gameweek}.ipynb')
         os.system(f'jupyter nbconvert --to html results/agent_{gameweek}.ipynb')

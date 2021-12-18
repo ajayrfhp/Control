@@ -37,15 +37,15 @@ Compare different model types, feature sets and window sizes
     - Results are under `lightning_logs/feature_comparison/`
     - Image below shows validation losses for different feature sets. 
         - Best feature set was `total_points-ict_index-clean_sheets-assists-was_home-goals_scored-goals_conceded`
-    ![validation losses](../results/feature_comparison.png)
+    ![validation losses](../lightning_logs/feature_comparison.png)
 - Window comparison results
     - To repeat experiment run `python agent.py --window_comparison True --run_E2E_agent False --epochs 100`
     - Results are under `lightning_logs/window_comparison/`
     - Image below shows validation losses for different window sizes
         - Best feature set was `total_points-ict_index-clean_sheets-assists-was_home-goals_scored-goals_conceded`
-    ![model comparison](../results/window_comparison.png)
+    ![model comparison](../lightning_logs/window_comparison.png)
 - Model comparison
     - To repeat experiment run `python agent.py --model_comparison True --run_E2E_agent False --epochs 100`
     - Results are under `lightning_logs/model_comparison/`
-    - Rnn seems to learn fast, but only is better than linear model by 1%. 
-    ![model comparison](../results/model_comparison.png)
+    - Rnn seems to learn faster, but linear model is marginally better over the course of time. 
+    ![model comparison](../lightning_logs/model_comparison.png)
