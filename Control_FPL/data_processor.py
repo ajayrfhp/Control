@@ -243,6 +243,7 @@ async def get_current_squad(player_feature_names, window, num_players=600):
         squad = await user.get_team()    
 
 
+
         cheapest_gk_price, cheapest_defender_price = 10000, 10000 
         cheapest_gk, cheapest_defender = None, None
         for i, player_element in enumerate(squad):
@@ -251,6 +252,7 @@ async def get_current_squad(player_feature_names, window, num_players=600):
                     player.in_current_squad = True
                     player.bank = bank
                     player.num_transfers_available = num_transfers_available
+                    player.in_playing_11 = player_element["multiplier"]
                     if player.position == "Goalkeeper" and player.bank < cheapest_gk_price:
                         cheapest_gk = player
                         cheapest_gk_price = cheapest_gk.latest_price
@@ -263,7 +265,6 @@ async def get_current_squad(player_feature_names, window, num_players=600):
         for player in current_squad_players:
             if player.id == cheapest_defender.id or player.id == cheapest_gk.id:
                 player.is_useless = True
-
 
         for player in players:
             if not player.in_current_squad:

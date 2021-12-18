@@ -2,6 +2,7 @@ import argparse
 from collections import defaultdict
 from importlib.metadata import version
 import pickle
+from re import sub
 import wget
 import os
 import pandas as pd
@@ -25,11 +26,12 @@ import knapsack
 import pytorch_lightning as pl
 import itertools
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
+import heapq
 
 
 class Agent:
     def __init__(self, player_feature_names, window=4, epochs=50, num_players=680, model_type='linear', lr=1e-3, weight_decay=0):
-        os.environ['GAMEWEEK'] = '17_2021'
+        os.environ['GAMEWEEK'] = '18_2021'
         self.player_feature_names = player_feature_names
         self.model = LightningWrapper(window_size=window, num_features=len(player_feature_names),  
                     model_type=model_type, player_feature_names = player_feature_names, lr=lr, weight_decay=weight_decay)
@@ -58,7 +60,7 @@ class Agent:
         current_squad, non_squad = await get_current_squad(player_feature_names, window=self.window, num_players=self.num_players)
         for player in current_squad + non_squad:
             player.predict_next_performance(self.model.model, self.normalizers)
-        current_squad, non_squad, _, _ = self.make_optimal_trade(current_squad, non_squad)
+        current_squad, non_squad, _, _ = await self.make_optimal_trade(current_squad, non_squad)
         return current_squad, non_squad
     
     async def load_latest_model(self):
@@ -92,7 +94,7 @@ class Agent:
                         position_key = (player_out.position, start_cost)
                         candidate_swaps.extend(most_valuable_players_under_cost[position_key])
                     for player_in in candidate_swaps:
-                        if len(traded) >= 1:
+                        if len(traded) >= 1 and traded[0]:
                             if player_out == traded[0][0] or player_in == traded[0][1]:
                                 continue
                         if player_in.position == player_out.position and player_in.latest_price  <= player_out.latest_price + player_out.bank and players_in_same_team[player_in.team] <= 2:
@@ -111,7 +113,6 @@ class Agent:
             optimal_trades_gain = 0
             traded = []
             for _ in range(num_trades):
-                print(num_trades, traded)
                 optimal_trade, optimal_trade_gain = self.get_optimal_single_trade(current_squad, non_squad, traded)
                 optimal_trades.append(optimal_trade)
                 optimal_trades_gain += optimal_trade_gain
@@ -120,7 +121,7 @@ class Agent:
                             "trades_gain" : optimal_trades_gain}
             return trade_info
 
-    def make_optimal_trade(self, current_squad, non_squad):
+    async def make_optimal_trade(self, current_squad, non_squad):
         '''
             For each player in squad, 
             find best performing player that can be bought under budget and estimate gain from doing trade. 
@@ -190,11 +191,22 @@ class Agent:
             optimal_single_trade = self.get_optimal_sequential_double_trade(current_squad, non_squad, num_trades=num_transfers_avalable)
             optimal_trade, num_trades = optimal_single_trade, num_transfers_avalable
 
+        if num_transfers_avalable == 2:
+            to_hold_for_double = False
+
         for (player_out, player_in) in optimal_trade["trades"][:num_trades]:
             if not to_hold_for_double:        
                 current_squad = [player for player in current_squad if player.name != player_out.name] + [player_in]
                 non_squad = [player for player in non_squad if player.name != player_in.name] + [player_out]
-            
+                async with aiohttp.ClientSession() as session:
+                    fpl = FPL(session)
+                    await fpl.login(email=email, password=password)
+                    user = await fpl.get_user(user_id)
+                    try : 
+                        await user.transfer([player_out.id], [player_in.id], max_hit=60)
+                    except aiohttp.ContentTypeError or KeyError:
+                        print(f'successful transfer {player_out.name} {player_in.name}')
+
             print(f"Player out {player_out.name}. {player_out.predicted_performance} To double trade  = {to_hold_for_double} ")
             player_out.visualize()
             print(f"Player in {player_in.name}. {player_in.predicted_performance} To double trade  = {to_hold_for_double} ")
@@ -203,37 +215,51 @@ class Agent:
         
         return current_squad, non_squad, optimal_trade, to_hold_for_double
 
-    def set_playing_11(self, current_squad, visualize=False):
-        players_by_position = defaultdict(list)
-        for player in current_squad:
-            print(player.name)
-            players_by_position[player.position].append(player)
-
-        for position, players in players_by_position.items():
-            players_by_position[position] = sorted(players, key = lambda x : x.predicted_performance, reverse=True)
-        
-        best_points = -np.inf 
-        best_11 = []
-        acceptable_formations = [(1, 3, 4, 3), (1, 3, 5, 2), (1, 4, 3, 3), (1, 5, 3, 2), (1, 5, 4, 1), (1, 5, 2, 3), (1, 3, 4, 3)]
-        for (num_gks, num_d, num_m, num_f) in acceptable_formations:
-            formation = { "Goalkeeper" : num_gks, "Defender" : num_d, "Midfielder" : num_m, "Forward" : num_f}
-            this_11 = []
-            this_points = 0
-            for position, num_players_in_position in formation.items():
-                selected_players_in_position = players_by_position[position][:num_players_in_position]
-                this_11.extend(selected_players_in_position)
-                this_points += sum([player.predicted_performance for player in selected_players_in_position])
-            
-            if this_points > best_points:
-                best_points = this_points
-                best_11 = this_11
-        
+    async def set_playing_11(self, current_squad, visualize=False):
         if visualize:
-            for player in best_11:
-                print(player.name)
+            for player in current_squad:
                 player.visualize()
 
-        return best_11
+        
+        playing_11_queue, subs_queue = [], []
+        captain, vice_captain = None, None 
+        captain_points, vice_captain_points = 0, 0
+        for player in current_squad:
+            if player.in_playing_11:
+                heapq.heappush(playing_11_queue, player)
+            else:
+                player.predicted_performance *= -1
+                heapq.heappush(subs_queue, player)
+
+            if captain_points < player.player_features[-20:,0].sum():
+                captain = player 
+                captain_points = player.player_features[-20:,0].sum()
+            if vice_captain_points < player.player_features[-20:,0].sum() and captain != player and player.position != 'Goalkeeper':
+                vice_captain = player 
+                vice_captain_points = player.player_features[-20:,0].sum()
+        
+        players_out, players_in = [], []
+        while len(subs_queue):
+            best_sub = heapq.heappop(subs_queue)
+            worst_in_11 = heapq.heappop(playing_11_queue)
+            best_sub.predicted_performance *= -1
+            if best_sub.position == "Goalkeeper":
+                if best_sub.predicted_performance > worst_in_11.predicted_performance and best_sub.position == worst_in_11.position:
+                    players_out.append(worst_in_11)
+                    players_in.append(best_sub)
+            elif best_sub.predicted_performance > worst_in_11.predicted_performance:
+                players_out.append(worst_in_11)
+                players_in.append(best_sub)
+                
+        
+        async with aiohttp.ClientSession() as session:
+            fpl = FPL(session)
+            await fpl.login(email=email, password=password)
+            user = await fpl.get_user(user_id)
+            await user.substitute([player.id for player in players_in], [player.id for player in players_out], captain.id, vice_captain.id)
+
+
+        
 
     def show_top_performers(self, players, k=10):
         players_by_position = defaultdict(list)
@@ -311,7 +337,7 @@ if __name__ == "__main__":
     parser.add_argument('--feature_comparison', type=str, default=False, help='compare different feature sets with linear model')
     parser.add_argument('--window_comparison', type=str, default=False, help='compare windows of different length with linear model')
     parser.add_argument('--model_comparison', type=str, default=False, help='compare different models')
-    os.environ['GAMEWEEK'] = '17_2021'
+    os.environ['GAMEWEEK'] = '18_2021'
     args = parser.parse_args()
     
     if args.run_E2E_agent == "True":
@@ -346,8 +372,8 @@ if __name__ == "__main__":
             logger = pl.loggers.TensorBoardLogger(f"lightning_logs/model_comparison/{model_type}")
             lr, weight_decay = 1e-3, 0
             if model_type == "rnn":
-                lr, weight_decay = 5e-4, 1e-4
-            trainer = pl.Trainer(max_epochs=args.epochs, gpus=torch.cuda.device_count(), logger=logger,  callbacks=[EarlyStopping(monitor="val_loss", patience=5)])
+                lr, weight_decay = 1e-3, 0
+            trainer = pl.Trainer(max_epochs=args.epochs, gpus=torch.cuda.device_count(), logger=logger,  callbacks=[EarlyStopping(monitor="val_loss", patience=10)])
             agent = Agent(features, epochs=args.epochs, window=6, model_type=model_type, lr=lr, weight_decay=weight_decay)
             asyncio.run(agent.get_data())
             asyncio.run(agent.update_model(trainer))
@@ -362,5 +388,5 @@ if __name__ == "__main__":
         if args.update_squad == "True":
             asyncio.run(agent.load_latest_model())
             new_squad, non_squad = asyncio.run(agent.get_new_squad(args.player_feature_names))
-            agent.set_playing_11(new_squad)
+            asyncio.run(agent.set_playing_11(new_squad))
             agent.show_top_performers(new_squad + non_squad, k=10)

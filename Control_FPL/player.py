@@ -33,6 +33,10 @@ class Player:
         self.in_playing_11 = in_playing_11
         self.num_features = len(self.player_feature_names)
         self.is_useless = False
+        self.multiplier = 0
+    
+    def __lt__(self, other):
+        return self.predicted_performance < other.predicted_performance
 
     def visualize(self):
         plt.title(f"{self.name} {self.predicted_performance} {self.chance_of_playing_this_round}")

@@ -45,7 +45,7 @@ class LinearModel(nn.Module):
 class RNNModel(nn.Module):
     def __init__(self, window_size=4,
                        num_features=5, num_layers=3,
-                       hidden_dim=128):
+                       hidden_dim=5):
         super(RNNModel, self).__init__()
         self.rnn = nn.RNN(num_features, hidden_dim, num_layers).double()
         self.fc = nn.Linear(hidden_dim, 1).double()

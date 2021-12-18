@@ -124,7 +124,7 @@ class TestAsync(unittest.IsolatedAsyncioTestCase):
         count_useless = [player for player in current_squad if player.is_useless]
         self.assertEqual(len(count_useless), 2)
 
-        best_11 = agent.set_playing_11(current_squad)
+        best_11 = await agent.set_playing_11(current_squad)
         self.assertEqual(len(best_11), 11)
 
 
@@ -224,7 +224,7 @@ class TestAsync(unittest.IsolatedAsyncioTestCase):
             get_empty_player('Player17', 3, 10, 'TeamA', latest_price=7), 
             get_empty_player('Player18', 3, 3, 'TeamB'), 
             get_empty_player('Player18', 4, 3, 'TeamB')]
-        current_squad, non_squad, trades, to_hold_for_double = agent.make_optimal_trade(current_squad, non_squad)
+        current_squad, non_squad, trades, to_hold_for_double = await agent.make_optimal_trade(current_squad, non_squad)
         
         players_out = set({trades["trades"][0][0].name, trades["trades"][1][0].name})
         players_in = set({trades["trades"][0][1].name, trades["trades"][1][1].name})
@@ -256,7 +256,7 @@ class TestAsync(unittest.IsolatedAsyncioTestCase):
             get_empty_player('Player17', 3, 10, 'TeamA', latest_price=6), 
             get_empty_player('Player18', 3, 3, 'TeamB', latest_price=3), 
             get_empty_player('Player18', 4, 3, 'TeamB')]
-        current_squad, non_squad, trades, to_hold_for_double = agent.make_optimal_trade(current_squad, non_squad)
+        current_squad, non_squad, trades, to_hold_for_double = await agent.make_optimal_trade(current_squad, non_squad)
         
         players_out = set({trades["trades"][0][0].name, trades["trades"][1][0].name})
         players_in = set({trades["trades"][0][1].name, trades["trades"][1][1].name})
@@ -295,7 +295,7 @@ class TestAsync(unittest.IsolatedAsyncioTestCase):
             get_empty_player('Player17', 3, 10, 'TeamA', latest_price=6), 
             get_empty_player('Player18', 3, 3, 'TeamB', latest_price=3), 
             get_empty_player('Player18', 4, 3, 'TeamB')]
-        current_squad, non_squad, trades, to_hold_for_double = agent.make_optimal_trade(current_squad, non_squad)
+        current_squad, non_squad, trades, to_hold_for_double = await agent.make_optimal_trade(current_squad, non_squad)
         
         players_out = set({trades["trades"][0][0].name})
         players_in = set({trades["trades"][0][1].name})
