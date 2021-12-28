@@ -30,7 +30,7 @@ import heapq
 
 
 class Agent:
-    def __init__(self, player_feature_names, window=4, epochs=50, num_players=680, model_type='linear', lr=1e-3, weight_decay=0, gameweek=None):
+    def __init__(self, player_feature_names, window=4, epochs=50, num_players=680, model_type='linear', lr=1e-3, weight_decay=0, gameweek=None, trial_run=True):
         self.player_feature_names = player_feature_names
         self.model = LightningWrapper(window_size=window, num_features=len(player_feature_names),  
                     model_type=model_type, player_feature_names = player_feature_names, lr=lr, weight_decay=weight_decay)
@@ -42,6 +42,7 @@ class Agent:
         self.num_players = num_players
         self.model_directory = './results/models/'
         self.gameweek = gameweek
+        self.trial_run = trial_run
         
     
     async def get_data(self):
@@ -183,7 +184,7 @@ class Agent:
         num_transfers_avalable = current_squad[0].num_transfers_available
         optimal_sequential_double_trade = self.get_optimal_sequential_double_trade(current_squad, non_squad)
         optimal_parallel_double_trade = get_optimal_parallel_double_trade(current_squad, non_squad)
-        to_hold_for_double = optimal_parallel_double_trade["trades_gain"] > optimal_sequential_double_trade["trades_gain"]
+        to_hold_for_double = bool(optimal_parallel_double_trade["trades_gain"] > optimal_sequential_double_trade["trades_gain"])
         optimal_trade, num_trades = None, 0
         if to_hold_for_double:
             optimal_trade, num_trades = optimal_parallel_double_trade, 2
@@ -193,19 +194,21 @@ class Agent:
 
         if num_transfers_avalable == 2:
             to_hold_for_double = False
+        print(to_hold_for_double, self.trial_run)
 
         for (player_out, player_in) in optimal_trade["trades"][:num_trades]:
             if not to_hold_for_double:        
                 current_squad = [player for player in current_squad if player.name != player_out.name] + [player_in]
                 non_squad = [player for player in non_squad if player.name != player_in.name] + [player_out]
-                async with aiohttp.ClientSession() as session:
-                    fpl = FPL(session)
-                    await fpl.login(email=email, password=password)
-                    user = await fpl.get_user(user_id)
-                    try : 
-                        await user.transfer([player_out.id], [player_in.id], max_hit=0)
-                    except aiohttp.ContentTypeError or KeyError:
-                        print(f'successful transfer {player_out.name} {player_in.name}')
+                if not self.trial_run:
+                    async with aiohttp.ClientSession() as session:
+                        fpl = FPL(session)
+                        await fpl.login(email=email, password=password)
+                        user = await fpl.get_user(user_id)
+                        try : 
+                            await user.transfer([player_out.id], [player_in.id], max_hit=0)
+                        except (aiohttp.ContentTypeError, KeyError) as error:
+                            print(f'successful transfer {player_out.name} {player_in.name}')
 
             print(f"Player out {player_out.name}. {player_out.predicted_performance} To double trade  = {to_hold_for_double} ")
             player_out.visualize()
@@ -225,18 +228,18 @@ class Agent:
         captain, vice_captain = None, None 
         captain_points, vice_captain_points = 0, 0
         for player in current_squad:
+            player_total_points = player.player_features[0,-20:].sum()
             if player.in_playing_11:
                 heapq.heappush(playing_11_queue, player)
             else:
                 player.predicted_performance *= -1
                 heapq.heappush(subs_queue, player)
-
-            if captain_points < player.player_features[-20:,0].sum():
+            if captain_points < player_total_points:
                 captain = player 
-                captain_points = player.player_features[-20:,0].sum()
-            if vice_captain_points < player.player_features[-20:,0].sum() and captain != player and player.position != 'Goalkeeper':
+                captain_points = player_total_points
+            if vice_captain_points < player_total_points and captain != player and player.position != 'Goalkeeper':
                 vice_captain = player 
-                vice_captain_points = player.player_features[-20:,0].sum()
+                vice_captain_points = player_total_points
         
         players_out, players_in = [], []
         while len(subs_queue):
@@ -251,12 +254,12 @@ class Agent:
                 players_out.append(worst_in_11)
                 players_in.append(best_sub)
                 
-        
-        async with aiohttp.ClientSession() as session:
-            fpl = FPL(session)
-            await fpl.login(email=email, password=password)
-            user = await fpl.get_user(user_id)
-            await user.substitute([player.id for player in players_in], [player.id for player in players_out], captain.id, vice_captain.id)
+        if not self.trial_run:
+            async with aiohttp.ClientSession() as session:
+                fpl = FPL(session)
+                await fpl.login(email=email, password=password)
+                user = await fpl.get_user(user_id)
+                await user.substitute([player.id for player in players_in], [player.id for player in players_out], captain.id, vice_captain.id)
 
 
         
@@ -341,10 +344,11 @@ if __name__ == "__main__":
     
     if args.run_E2E_agent == "True":
         gameweek = asyncio.run(get_latest_game_week()).deadline_time
-        os.system('source activate test')
-        os.system('papermill agent.ipynb agent.ipynb')
-        os.system(f'cp agent.ipynb results/agent_{gameweek}.ipynb')
-        os.system(f'jupyter nbconvert --to html results/agent_{gameweek}.ipynb')
+        if not os.path.exists('results/{user_id}/agent_{gameweek}.ipynb'):
+            os.system('source activate test')
+            os.system('papermill agent.ipynb agent.ipynb')
+            os.system(f'cp agent.ipynb results/{user_id}/agent_{gameweek}.ipynb')
+            os.system(f'jupyter nbconvert --to html results/{user_id}/agent_{gameweek}.ipynb')
     elif args.feature_comparison == "True":
         base_feature_set = ["ict_index", "clean_sheets", "saves", "assists", "was_home","goals_scored"]
         for feature_set in powerset(base_feature_set):

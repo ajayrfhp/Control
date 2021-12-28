@@ -445,4 +445,28 @@
     - Trigger run of agent based on FPL deadline. 
 - Share codebase with others. 
 
+# 26 Dec 12:37 PM
+- Bayesian linear model
+  - Predict player scores with uncertainity
+- Better bin packing
+  - 3d knapsack
+- Better pipeline
+  - Estimate chance of playing per player - use NLP to get injury info from twitter - Siddarth's idea
+  - Fully automatic pipeline
+    - Bash cron job
+    - Automatically figure out game week id
+    - Download dataset
+    - Trigger run of agent based on FPL deadline. 
+- Share codebase with others. 
+
+# 28 Dec 1:32 PM
+- Bayesian linear model
+  - Predict player scores with uncertainity
+- Better bin packing
+  - 3d knapsack
+- Better pipeline
+  - Estimate chance of playing per player - use NLP to get injury info from twitter - Siddarth's idea
+- Share codebase with others. 
+
+
 
