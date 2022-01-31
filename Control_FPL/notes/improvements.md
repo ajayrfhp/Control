@@ -462,11 +462,27 @@
 # 28 Dec 1:32 PM
 - Bayesian linear model
   - Predict player scores with uncertainity
+- Use data from previous years.
 - Better bin packing
   - 3d knapsack
 - Better pipeline
   - Estimate chance of playing per player - use NLP to get injury info from twitter - Siddarth's idea
 - Share codebase with others. 
+  - Publish the dataset and setup prediction challenge
+  - Publish the fpl decision engine
+
+# Jan 30 9 : 11 PM
+- Bayesian linear model
+  - Predict player scores with uncertainity
+- Use data from previous years.
+- Better bin packing
+  - 3d knapsack
+- Better pipeline
+  - Estimate chance of playing per player - use NLP to get injury info from twitter - Siddarth's idea
+- Share codebase with others. 
+  - Publish the dataset and setup prediction challenge
+  - Publish the fpl decision engine
+
 
 
 
